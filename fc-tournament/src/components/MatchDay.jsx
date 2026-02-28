@@ -15,7 +15,7 @@ export default function MatchDay() {
   
   const [activeTournament, setActiveTournament] = useState(null);
   const [matchData, setMatchData] = useState({ 
-    homeTeam: null, awayTeam: null, homeScore: 0, awayScore: 0, playerGoals: {} 
+    homeTeam: null, awayTeam: null, homeScore: '', awayScore: '', playerGoals: {} 
   });
 
   const [newTournament, setNewTournament] = useState({ type: '', format: '2v2', teams: [] });
@@ -51,12 +51,22 @@ export default function MatchDay() {
 
   const isScoreValid = () => {
     if (!matchData.homeTeam || !matchData.awayTeam) return false;
-    const getTeamGoalSum = (team) => team.playerData.reduce((sum, p) => sum + (matchData.playerGoals[p.id] || 0), 0);
-    return getTeamGoalSum(matchData.homeTeam) === matchData.homeScore && getTeamGoalSum(matchData.awayTeam) === matchData.awayScore;
+    if (matchData.homeScore === '' || matchData.awayScore === '') return false;
+
+    // For 1v1, validation is true once scores are entered
+    if (activeTournament?.format === '1v1') return true;
+
+    // For 2v2, check if individual goals match team score
+    const getTeamGoalSum = (team) => team.playerData.reduce((sum, p) => sum + (parseInt(matchData.playerGoals[p.id]) || 0), 0);
+    return getTeamGoalSum(matchData.homeTeam) === parseInt(matchData.homeScore) && 
+           getTeamGoalSum(matchData.awayTeam) === parseInt(matchData.awayScore);
   };
 
   const handleUpdateScore = async () => {
     if (!isScoreValid()) return;
+
+    const homeS = parseInt(matchData.homeScore) || 0;
+    const awayS = parseInt(matchData.awayScore) || 0;
 
     const updatedTeams = activeTournament.teams.map(team => {
       let teamCopy = { ...team };
@@ -64,20 +74,31 @@ export default function MatchDay() {
       const isAway = team.name === matchData.awayTeam.name;
 
       if (isHome || isAway) {
-        const score = isHome ? matchData.homeScore : matchData.awayScore;
-        const oppScore = isHome ? matchData.awayScore : matchData.homeScore;
+        const score = isHome ? homeS : awayS;
+        const oppScore = isHome ? awayS : homeS;
         teamCopy.totalGoals += score;
+        
         if (score > oppScore) teamCopy.pts += 3;
         else if (score === oppScore) teamCopy.pts += 1;
 
         teamCopy.playerData = teamCopy.playerData.map((p, idx, arr) => {
-          const goals = matchData.playerGoals[p.id] || 0;
-          let autoAssists = 0;
-          if (activeTournament.format === '2v2') {
+          let goals = 0;
+          let assists = 0;
+
+          if (activeTournament.format === '1v1') {
+            goals = score;
+            assists = 0;
+          } else {
+            goals = parseInt(matchData.playerGoals[p.id]) || 0;
             const partner = arr[idx === 0 ? 1 : 0];
-            autoAssists = matchData.playerGoals[partner.id] || 0;
+            assists = parseInt(matchData.playerGoals[partner.id]) || 0;
           }
-          return { ...p, tournamentGoals: (p.tournamentGoals || 0) + goals, tournamentAssists: (p.tournamentAssists || 0) + autoAssists };
+
+          return { 
+            ...p, 
+            tournamentGoals: (p.tournamentGoals || 0) + goals, 
+            tournamentAssists: (p.tournamentAssists || 0) + assists 
+          };
         });
       }
       return teamCopy;
@@ -87,14 +108,12 @@ export default function MatchDay() {
       await updateDoc(doc(db, "tournaments", activeTournament.id), { teams: updatedTeams });
       await addDoc(collection(db, "matches"), {
         tournamentType: activeTournament.type,
-        homeTeam: matchData.homeTeam.name,
-        awayTeam: matchData.awayTeam.name,
-        homeScore: matchData.homeScore,
-        awayScore: matchData.awayScore,
+        homeTeam: matchData.homeTeam.name, awayTeam: matchData.awayTeam.name,
+        homeScore: homeS, awayScore: awayS,
         createdAt: new Date()
       });
       setShowMatchModal(false);
-      setMatchData({ homeTeam: null, awayTeam: null, homeScore: 0, awayScore: 0, playerGoals: {} });
+      setMatchData({ homeTeam: null, awayTeam: null, homeScore: '', awayScore: '', playerGoals: {} });
       fetchData();
     } catch (e) { console.error(e); }
   };
@@ -130,7 +149,6 @@ export default function MatchDay() {
 
   return (
     <motion.div animate={screenShake ? { x: [-10, 10, -10, 10, 0] } : {}} className="space-y-12 p-4 custom-scrollbar relative">
-      {/* HEADER SECTION */}
       <div className="flex justify-between items-center mb-10">
         <h2 className="text-4xl font-black italic uppercase tracking-tighter text-white">Match Day</h2>
         <button 
@@ -141,7 +159,6 @@ export default function MatchDay() {
         </button>
       </div>
 
-      {/* ACTIVE TOURNAMENTS GRID */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {tournaments.map(t => (
           <div key={t.id} className="glass-card p-6 border-t-4 border-t-neonBlue relative group">
@@ -190,8 +207,6 @@ export default function MatchDay() {
         ))}
       </div>
 
-      {/* --- MATCH HISTORY SECTION --- */}
-      {/* --- MATCH HISTORY SECTION --- */}
 <div className="mt-16 bg-white/5 rounded-[40px] p-8 border border-white/5">
   <div className="flex items-center gap-4 mb-8">
      <History className="text-neonBlue w-6 h-6" />
@@ -201,20 +216,14 @@ export default function MatchDay() {
   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
     {matches.length > 0 ? matches.map(m => (
       <div key={m.id} className="bg-black/40 p-6 rounded-3xl border border-white/5 flex flex-col sm:flex-row items-center justify-between gap-4 hover:border-neonBlue/30 transition-all group relative overflow-hidden">
-        
-        {/* LEAGUE LOGO WATERMARK (SUBTLE) */}
         <img 
           src={leagues.find(l => l.name === m.tournamentType)?.logo} 
           className="absolute -right-2 -bottom-2 w-16 h-16 object-contain opacity-[0.03] group-hover:opacity-[0.08] transition-opacity" 
         />
-
         <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto">
-          {/* HOME TEAM - Full visibility */}
           <span className="text-sm font-black text-white uppercase tracking-tight text-center sm:text-left leading-tight">
             {m.homeTeam}
           </span>
-          
-          {/* ADAPTIVE VS DIVIDER */}
           <div className="flex items-center gap-2">
             <div className="w-4 h-[1px] bg-white/10 sm:hidden" />
             <span className="text-[10px] font-black italic tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-neonBlue to-purple-500 px-2 py-1 bg-white/5 rounded-full border border-white/5">
@@ -222,14 +231,10 @@ export default function MatchDay() {
             </span>
             <div className="w-4 h-[1px] bg-white/10 sm:hidden" />
           </div>
-
-          {/* AWAY TEAM - Full visibility */}
           <span className="text-sm font-black text-white uppercase tracking-tight text-center sm:text-left leading-tight">
             {m.awayTeam}
           </span>
         </div>
-        
-        {/* SCOREBOARD BOX */}
         <div className="flex flex-col items-center">
           <div className="text-center bg-white/5 px-6 py-2 rounded-2xl border border-white/10 shadow-xl min-w-[100px]">
             <span className="text-2xl font-black italic text-white tracking-tighter">
@@ -247,7 +252,6 @@ export default function MatchDay() {
   </div>
 </div>
 
-      {/* CREATE TOURNAMENT MODAL */}
       <AnimatePresence>
         {showCreateModal && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 backdrop-blur-xl p-4">
@@ -317,7 +321,6 @@ export default function MatchDay() {
         )}
       </AnimatePresence>
 
-      {/* MATCH UPDATE MODAL */}
       <AnimatePresence>
         {showMatchModal && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 backdrop-blur-xl p-4">
@@ -336,12 +339,11 @@ export default function MatchDay() {
                   </select>
                 </div>
 
-                {/* SCORE INPUTS - NOW EMPTY BY DEFAULT */}
                 <div className="flex items-center justify-center gap-10 bg-white/5 p-6 rounded-3xl border border-white/5">
                   <input 
                     type="number" 
                     placeholder="-" 
-                    value={matchData.homeScore || ''} 
+                    value={matchData.homeScore} 
                     onChange={(e) => setMatchData({...matchData, homeScore: e.target.value === '' ? '' : parseInt(e.target.value)})} 
                     className="w-20 h-20 bg-black/40 border-2 border-neonBlue rounded-2xl text-center text-4xl font-black text-white outline-none placeholder:text-gray-700" 
                   />
@@ -349,13 +351,14 @@ export default function MatchDay() {
                   <input 
                     type="number" 
                     placeholder="-" 
-                    value={matchData.awayScore || ''} 
+                    value={matchData.awayScore} 
                     onChange={(e) => setMatchData({...matchData, awayScore: e.target.value === '' ? '' : parseInt(e.target.value)})} 
                     className="w-20 h-20 bg-black/40 border-2 border-neonBlue rounded-2xl text-center text-4xl font-black text-white outline-none placeholder:text-gray-700" 
                   />
                 </div>
 
-                {(matchData.homeTeam || matchData.awayTeam) && (
+                {/* INDIVIDUAL PLAYER GOALS - ONLY SHOW FOR 2V2 */}
+                {activeTournament?.format === '2v2' && (matchData.homeTeam || matchData.awayTeam) && (
                   <div className="space-y-6 pt-4 border-t border-white/10">
                     <p className="text-[10px] font-black text-neonBlue uppercase tracking-widest text-center">Assign Scorer</p>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -369,7 +372,7 @@ export default function MatchDay() {
                                 <input 
                                   type="number" 
                                   placeholder="-" 
-                                  value={matchData.playerGoals[p.id] || ''}
+                                  value={matchData.playerGoals[p.id] || ''} 
                                   onChange={(e) => setMatchData(prev => ({...prev, playerGoals: {...prev.playerGoals, [p.id]: e.target.value === '' ? '' : parseInt(e.target.value)}}))} 
                                   className="w-16 h-8 bg-white/5 border border-white/10 rounded text-center text-xs font-black text-neonBlue placeholder:text-gray-700" 
                                 />
