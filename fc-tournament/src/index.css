@@ -1,0 +1,18 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  background-color: #020617;
+  color: white;
+  min-height: 100vh;
+  /* Subtle grid pattern for a digital stadium look */
+  background-image: linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+  linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+  background-size: 50px 50px;
+}
+
+/* Custom Glass Card Class */
+.glass-card {
+  @apply bg-glass backdrop-blur-md border border-white/10 rounded-2xl shadow-xl;
+}
