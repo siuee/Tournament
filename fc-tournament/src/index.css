@@ -2,17 +2,92 @@
 @tailwind components;
 @tailwind utilities;
 
-body {
-  background-color: #020617;
-  color: white;
-  min-height: 100vh;
-  /* Subtle grid pattern for a digital stadium look */
-  background-image: linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
-  linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
-  background-size: 50px 50px;
+:root {
+  --minion-yellow: #fde047;
+  --fc-gold: #eab308;
+  --stadium-blue: #0ea5e9;
 }
 
-/* Custom Glass Card Class */
+body {
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+  /* We remove the background-color here so App.jsx can control it dynamically */
+  color: white;
+  overflow-x: hidden;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+/* Custom Glass Card - Standardized for both modes */
 .glass-card {
-  @apply bg-glass backdrop-blur-md border border-white/10 rounded-2xl shadow-xl;
+  @apply backdrop-blur-xl border border-white/10 rounded-[32px] shadow-2xl transition-all duration-300;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+/* --- THE EA SPORTS FC CARD SHAPE --- */
+.fc-clip-path {
+  clip-path: polygon(10% 0, 90% 0, 100% 8%, 100% 85%, 50% 100%, 0 85%, 0 8%);
+}
+
+/* --- UTILITY CLASSES --- */
+
+/* Hide scrollbars but keep functionality */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Custom scrollbar for desktop */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 5px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(234, 179, 8, 0.3);
+  border-radius: 10px;
+}
+
+/* --- ANIMATIONS --- */
+
+/* Lava Flow for Ballon d'Or Progress Bars */
+@keyframes lava-flow {
+  0% { background-position: 200% 50%; }
+  100% { background-position: -200% 50%; }
+}
+.animate-lava {
+  background-size: 200% 100%;
+  animation: lava-flow 3s linear infinite;
+}
+
+/* Shimmer for active navigation buttons */
+@keyframes shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+/* Animated Border for League Tables */
+@keyframes gradient-border {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+.animate-gradient-border {
+  background-size: 200% 200%;
+  animation: gradient-border 4s ease infinite;
+}
+
+/* --- THEME SPECIFIC OVERRIDES --- */
+.bello-theme .glass-card {
+  @apply bg-white/60 border-sky-100 shadow-sky-900/5;
+  color: #0f172a;
+}
+
+.fc-theme .glass-card {
+  @apply bg-black/40 border-white/5 shadow-black/50;
+  color: white;
 }
