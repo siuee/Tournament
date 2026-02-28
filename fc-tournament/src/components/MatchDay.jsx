@@ -483,8 +483,8 @@ export default function MatchDay() {
         )}
       </AnimatePresence>
 
-      {/* Global CSS overrides */}
-      <style jsx global>{`
+      {/* Global CSS overrides safely injected without Next.js jsx tag */}
+      <style dangerouslySetInnerHTML={{ __html: `
         .custom-scrollbar::-webkit-scrollbar { width: 4px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: rgba(255, 255, 255, 0.02); }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(234, 179, 8, 0.5); border-radius: 10px; }
@@ -502,7 +502,7 @@ export default function MatchDay() {
         .no-spinners {
           -moz-appearance: textfield;
         }
-      `}</style>
+      `}} />
     </motion.div>
   );
 }

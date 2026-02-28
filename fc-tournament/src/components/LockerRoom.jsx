@@ -1,14 +1,16 @@
 import { useState, useRef, useEffect } from 'react';
-import { Camera, Plus, X, Video, Trash2, Edit2, ShieldCheck } from 'lucide-react';
+import { Camera, Plus, X, Video, Trash2, Edit2, ShieldCheck, UserPlus, Sparkles, Hash, Zap, TrendingUp, CalendarDays } from 'lucide-react';
 import { db, storage } from '../firebase';
-import { collection, getDocs, doc, setDoc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { collection, getDocs, doc, setDoc, deleteDoc, writeBatch } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { motion, AnimatePresence } from 'framer-motion';
 
 export default function LockerRoom() {
   const [players, setPlayers] = useState([]);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isStudioOpen, setIsStudioOpen] = useState(false);
   const [editingPlayer, setEditingPlayer] = useState(null);
+  const [loading, setLoading] = useState(true);
   
   // Form State
   const [formData, setFormData] = useState({ name: '', nickname: '' });
@@ -24,23 +26,112 @@ export default function LockerRoom() {
   const chunksRef = useRef([]);
 
   useEffect(() => {
-    fetchPlayers();
+    fetchPlayersAndSyncSeason();
   }, []);
 
-  const fetchPlayers = async () => {
+  // --- THE MONTHLY PROGRESSION ENGINE ---
+  const fetchPlayersAndSyncSeason = async () => {
     try {
-      const querySnapshot = await getDocs(collection(db, "players"));
-      const pList = [];
-      querySnapshot.forEach((doc) => {
-        // We use doc.id to ensure we are using the unique Firebase ID
-        pList.push({ id: doc.id, ...doc.data() });
-      });
+      const currentMonth = new Date().toISOString().slice(0, 7); // Format: "YYYY-MM"
       
-      // Sort and set
-      setPlayers([...pList].sort((a, b) => a.name.localeCompare(b.name)));
+      const pSnap = await getDocs(collection(db, "players"));
+      const tSnap = await getDocs(collection(db, "tournaments"));
+      
+      // 1. Initialize player tracking map
+      const playerStats = {};
+      pSnap.docs.forEach(d => {
+        playerStats[d.id] = { ...d.data(), id: d.id, mGoals: 0, mAssists: 0 };
+      });
+
+      // 2. Scan ONLY tournaments created in the current month
+      tSnap.docs.forEach(doc => {
+        const data = doc.data();
+        let tMonth = '';
+        if (data.createdAt) {
+           const tDate = data.createdAt.toDate ? data.createdAt.toDate() : new Date(data.createdAt);
+           tMonth = tDate.toISOString().slice(0, 7);
+        }
+        
+        // If it's this month's tournament, add up the stats
+        if (tMonth === currentMonth && data.teams) {
+          data.teams.forEach(team => {
+            if (team.playerData) {
+              team.playerData.forEach(pd => {
+                if (playerStats[pd.id]) {
+                  playerStats[pd.id].mGoals += (pd.tournamentGoals || 0);
+                  playerStats[pd.id].mAssists += (pd.tournamentAssists || 0);
+                }
+              });
+            }
+          });
+        }
+      });
+
+      const batch = writeBatch(db);
+      let batchCount = 0;
+      const finalPlayers = [];
+
+      // 3. Calculate new stats & Check for Monthly Resets
+      Object.values(playerStats).forEach(p => {
+         const stats = generateDynamicStats(p.mGoals, p.mAssists, p.name);
+         const calculatedOvr = stats.ovr;
+
+         // If the month changed OR their OVR changed, STORE IT IN THE DATABASE
+         if (p.lastResetMonth !== currentMonth || p.ovr !== calculatedOvr) {
+            batch.update(doc(db, "players", p.id), {
+               ovr: calculatedOvr,
+               lastResetMonth: currentMonth,
+               monthlyGoals: p.mGoals,
+               monthlyAssists: p.mAssists
+            });
+            batchCount++;
+         }
+
+         finalPlayers.push({ ...p, stats });
+      });
+
+      // Commit the resets/updates to Firebase
+      if (batchCount > 0) {
+         await batch.commit();
+      }
+
+      // 4. Sort roster: Highest OVR first
+      finalPlayers.sort((a, b) => {
+        if (b.stats.ovr !== a.stats.ovr) return b.stats.ovr - a.stats.ovr;
+        if (b.mGoals !== a.mGoals) return b.mGoals - a.mGoals;
+        return (a.name || "").localeCompare(b.name || "");
+      });
+
+      setPlayers(finalPlayers);
+      setLoading(false);
     } catch (error) {
-      console.error("Error fetching players: ", error);
+      console.error("Error syncing seasonal data: ", error);
+      setLoading(false);
     }
+  };
+
+  // THE EA FC ALGORITHM (Base 75 -> Hard 99)
+  const generateDynamicStats = (goals, assists, name) => {
+    // Math: Goals are worth 0.25 points, Assists worth 0.15. 
+    // To go from 75 to 99 (+24), you need roughly 80 goals and 30 assists!
+    const ovr = Math.min(99, Math.max(75, 75 + Math.floor((goals * 0.25) + (assists * 0.15))));
+    
+    return {
+      ovr: ovr,
+      pac: Math.min(99, 75 + Math.floor((goals + assists) * 0.15)),
+      sho: Math.min(99, 70 + Math.floor(goals * 0.3)),
+      pas: Math.min(99, 72 + Math.floor(assists * 0.4)),
+      dri: Math.min(99, 76 + Math.floor((goals + assists) * 0.1)),
+      def: Math.min(99, 45 + Math.floor(assists * 0.2)),
+      phy: Math.min(99, 70 + Math.floor(goals * 0.15))
+    };
+  };
+
+  const formatName = (fullName) => {
+    if (!fullName || typeof fullName !== 'string') return { first: '', last: 'UNKNOWN' };
+    const parts = fullName.trim().split(' ');
+    if (parts.length === 1) return { first: '', last: parts[0] };
+    return { first: parts[0], last: parts.slice(1).join(' ') };
   };
 
   // --- STUDIO LOGIC ---
@@ -52,6 +143,7 @@ export default function LockerRoom() {
       if (videoRef.current) videoRef.current.srcObject = mediaStream;
     } catch (err) {
       alert("Camera access denied.");
+      setIsStudioOpen(false);
     }
   };
 
@@ -96,7 +188,6 @@ export default function LockerRoom() {
   // --- DATABASE LOGIC ---
   const handleSavePlayer = async (e) => {
     e.preventDefault();
-    // Create a truly unique ID if not editing
     const id = editingPlayer ? editingPlayer.id : `player_${Date.now()}`;
     let finalVideoUrl = editingPlayer ? editingPlayer.videoUrl : null;
   
@@ -107,19 +198,16 @@ export default function LockerRoom() {
         finalVideoUrl = await getDownloadURL(storageRef);
       }
   
+      // Only set static identity data. Stats are calculated automatically!
       const playerData = {
-        name: formData.name,
-        nickname: formData.nickname,
+        name: formData.name || 'Unknown Player',
+        nickname: formData.nickname || '',
         videoUrl: finalVideoUrl,
-        goals: editingPlayer ? editingPlayer.goals : 0,
-        assists: editingPlayer ? editingPlayer.assists : 0
       };
   
       await setDoc(doc(db, "players", id), playerData, { merge: true });
-      
-      // Crucial: Reset everything before refetching
       resetForm();
-      await fetchPlayers(); 
+      await fetchPlayersAndSyncSeason(); 
     } catch (error) {
       console.error("Save failed:", error);
     }
@@ -129,7 +217,7 @@ export default function LockerRoom() {
     const password = prompt("Enter Admin Password to delete player:");
     if (password === "Supshzz1") {
       await deleteDoc(doc(db, "players", id));
-      fetchPlayers();
+      fetchPlayersAndSyncSeason();
     } else {
       alert("Incorrect Password!");
     }
@@ -143,93 +231,257 @@ export default function LockerRoom() {
     setTempVideoBlob(null);
   };
 
+  const containerVariants = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.1 } } };
+  const itemVariants = { hidden: { opacity: 0, scale: 0.8, y: 20 }, show: { opacity: 1, scale: 1, y: 0, transition: { type: "spring", stiffness: 150 } } };
+
+  const fcCardShape = "polygon(10% 0, 90% 0, 100% 8%, 100% 85%, 50% 100%, 0 85%, 0 8%)";
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#020617] text-yellow-500 font-black tracking-widest uppercase flex-col gap-4">
+        <ShieldCheck className="w-12 h-12 animate-pulse" />
+        Syncing Monthly Form...
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-8 pb-20">
-      <div className="flex justify-between items-center">
-        <h2 className="text-3xl font-black italic tracking-tighter uppercase text-white">Squad Management</h2>
+    <div className="min-h-screen relative text-white pb-32 bg-gradient-to-b from-[#020617] via-[#050b14] to-black">
+      <div className="fixed inset-0 z-0 opacity-[0.03] pointer-events-none" style={{ backgroundImage: 'radial-gradient(circle at 2px 2px, #ffd700 1px, transparent 0)', backgroundSize: '30px 30px' }} />
+
+      {/* Header */}
+      <div className="px-4 md:px-8 pt-6 pb-4 border-b border-yellow-500/20 mb-8 bg-black/60 backdrop-blur-xl sticky top-0 z-30 flex justify-between items-center shadow-[0_10px_30px_rgba(0,0,0,0.5)]">
+         <div>
+            <h2 className="text-3xl md:text-5xl font-black italic uppercase tracking-tighter text-transparent bg-clip-text bg-gradient-to-b from-yellow-200 via-yellow-500 to-yellow-700 drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)] flex items-center gap-3">
+              My Club
+            </h2>
+            <div className="flex items-center gap-3 mt-1">
+              <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest flex items-center gap-1.5"><TrendingUp className="w-3 h-3 text-yellow-500"/> Live Ratings</p>
+              <div className="flex items-center gap-1 px-2 py-0.5 rounded bg-gradient-to-r from-yellow-600 to-yellow-500 text-black text-[9px] font-black shadow-[0_0_10px_rgba(234,179,8,0.4)]">
+                <CalendarDays className="w-2.5 h-2.5" /> SEASON: {new Date().toLocaleString('default', { month: 'short' }).toUpperCase()}
+              </div>
+            </div>
+         </div>
+         <button 
+           onClick={() => setIsFormOpen(true)}
+           className="hidden md:flex bg-gradient-to-b from-yellow-300 via-yellow-500 to-yellow-600 px-6 py-3 rounded-xl font-black uppercase text-xs tracking-widest text-black shadow-[0_0_20px_rgba(234,179,8,0.4)] hover:scale-105 active:scale-95 transition-all items-center gap-2 border border-yellow-200/50"
+         >
+           <UserPlus className="w-4 h-4" /> Open Pack
+         </button>
+      </div>
+
+      {/* FC PLAYER CARDS GRID */}
+      <div className="px-4 md:px-8 relative z-10 w-full max-w-[1600px] mx-auto">
+        {players.length === 0 && (
+           <div className="text-center py-20 text-gray-500 font-black tracking-widest uppercase text-xs">
+              No players found in club...
+           </div>
+        )}
+        
+        <motion.div variants={containerVariants} initial="hidden" animate="show" className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 sm:gap-6 md:gap-8 justify-items-center">
+          {players.map((player, idx) => {
+            const { first, last } = formatName(player.name);
+            const stats = player.stats;
+            
+            // Reached 99? Give them the ultimate glowing aesthetic!
+            const isMaxLevel = stats.ovr >= 99;
+            const isTop3 = idx < 3;
+            
+            return (
+              <motion.div 
+                variants={itemVariants}
+                key={player.id} 
+                className="w-full max-w-[280px] aspect-[2/3] relative group perspective-1000 cursor-pointer"
+              >
+                <div className="w-full h-full relative transform-gpu transition-all duration-300 ease-out group-hover:scale-[1.05] group-hover:-translate-y-2 drop-shadow-[0_15px_25px_rgba(0,0,0,0.8)]">
+                  
+                  {/* EDIT/DELETE ACTIONS */}
+                  <div className="absolute -top-3 -right-3 flex gap-2 z-50 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                    <button onClick={(e) => { e.stopPropagation(); setEditingPlayer(player); setFormData({ name: player.name, nickname: player.nickname }); setIsFormOpen(true); }} className="p-2 bg-yellow-500 text-black rounded-full shadow-lg hover:scale-110 active:scale-95"><Edit2 className="w-3.5 h-3.5" /></button>
+                    <button onClick={(e) => { e.stopPropagation(); handleDeletePlayer(player.id); }} className="p-2 bg-red-600 text-white rounded-full shadow-lg hover:scale-110 active:scale-95"><Trash2 className="w-3.5 h-3.5" /></button>
+                  </div>
+
+                  {/* OUTER GOLD BORDER */}
+                  <div 
+                    className={`absolute inset-0 bg-gradient-to-br ${isMaxLevel ? 'from-white via-yellow-200 to-yellow-500 shadow-[0_0_30px_rgba(255,255,255,0.5)]' : isTop3 ? 'from-yellow-100 via-yellow-500 to-yellow-800' : 'from-yellow-400/50 via-yellow-700/50 to-yellow-900/50'} p-[2px] group-hover:from-white group-hover:via-yellow-400 group-hover:to-yellow-700 transition-all`}
+                    style={{ clipPath: fcCardShape }}
+                  >
+                    
+                    {/* INNER CARD BODY */}
+                    <div 
+                      className={`w-full h-full bg-gradient-to-b ${isMaxLevel ? 'from-[#3a2f15] via-[#1a140a]' : isTop3 ? 'from-[#2a2415] via-[#0a0a0a]' : 'from-[#121212] via-black'} to-black relative flex flex-col items-center overflow-hidden`}
+                      style={{ clipPath: fcCardShape }}
+                    >
+                      
+                      {/* Background Details */}
+                      <div className="absolute inset-0 opacity-20 pointer-events-none" style={{ backgroundImage: 'linear-gradient(rgba(234, 179, 8, 0.2) 1px, transparent 1px), linear-gradient(90deg, rgba(234, 179, 8, 0.2) 1px, transparent 1px)', backgroundSize: '15px 15px' }} />
+                      <div className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[150%] h-[150%] bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] ${isMaxLevel ? 'from-white/30' : isTop3 ? 'from-yellow-600/30' : 'from-yellow-600/10'} via-transparent to-transparent opacity-50 mix-blend-screen`} />
+
+                      {/* TOP LEFT: OVR & POSITION */}
+                      <div className="absolute top-4 left-3 md:top-5 md:left-4 flex flex-col items-center z-20 drop-shadow-[0_2px_4px_rgba(0,0,0,1)]">
+                        <span className={`text-2xl md:text-3xl font-black leading-none tracking-tighter ${isMaxLevel ? 'text-transparent bg-clip-text bg-gradient-to-b from-white to-yellow-200 drop-shadow-[0_0_10px_rgba(255,255,255,0.5)]' : 'text-white'}`}>{stats.ovr}</span>
+                        <span className="text-[10px] md:text-xs font-black text-yellow-500 uppercase tracking-widest leading-none mt-0.5">ST</span>
+                        <div className="w-6 h-[1px] bg-yellow-500/50 mt-1 mb-1" />
+                        <img src="/assets/leagues/intl.jpg" className="w-4 h-3 md:w-5 md:h-4 object-cover rounded-[1px] opacity-90" alt="Nation" />
+                      </div>
+
+                      {/* CLUB RANK BADGE */}
+                      <div className="absolute top-4 right-3 md:top-5 md:right-4 flex flex-col items-center z-20 opacity-60 group-hover:opacity-100 transition-opacity">
+                        <span className="text-[8px] font-black uppercase tracking-widest text-yellow-500 leading-none mb-0.5">Rank</span>
+                        <span className="text-sm font-black text-white italic">#{idx + 1}</span>
+                      </div>
+
+                      {/* CENTER PLAYER VIDEO (Faded Mask) */}
+                      <div className="absolute top-0 left-0 right-0 h-[60%] z-10 flex items-end justify-center pointer-events-none" style={{ maskImage: 'linear-gradient(to bottom, black 50%, transparent 100%)', WebkitMaskImage: 'linear-gradient(to bottom, black 50%, transparent 100%)' }}>
+                        {player.videoUrl ? (
+                          <video src={player.videoUrl} autoPlay loop muted playsInline className="w-full h-[120%] object-cover object-top" />
+                        ) : (
+                          <div className="w-24 h-24 mb-10 rounded-full border border-yellow-500/30 bg-[#121212] flex items-center justify-center shadow-[0_0_30px_rgba(234,179,8,0.2)]">
+                            <Camera className="text-yellow-600/50 w-8 h-8" />
+                          </div>
+                        )}
+                      </div>
+
+                      {/* BOTTOM HALF: STATS & NAME */}
+                      <div className="absolute bottom-0 left-0 right-0 h-[45%] flex flex-col items-center justify-end pb-3 md:pb-4 px-2 z-20">
+                        
+                        <div className="flex flex-col items-center w-full px-4 mb-1">
+                          {first && (
+                            <span className="text-[9px] md:text-[11px] text-yellow-500 font-bold uppercase tracking-[0.3em] leading-none mb-0.5 text-center w-full truncate drop-shadow-[0_2px_2px_rgba(0,0,0,1)]">
+                              {first}
+                            </span>
+                          )}
+                          <span className={`text-lg md:text-2xl font-black uppercase tracking-tighter text-center leading-none w-full break-words drop-shadow-[0_2px_4px_rgba(0,0,0,1)] line-clamp-1 ${isMaxLevel ? 'text-transparent bg-clip-text bg-gradient-to-b from-white to-yellow-200' : 'text-white'}`}>
+                            {last}
+                          </span>
+                        </div>
+
+                        <div className="w-3/4 h-[1px] bg-gradient-to-r from-transparent via-yellow-500/50 to-transparent my-1 md:my-2" />
+
+                        {/* Authentic FC Stats Grid */}
+                        <div className="grid grid-cols-6 w-full px-2 gap-x-1 gap-y-0.5 text-center">
+                          <div className="flex flex-col"><span className="text-[10px] md:text-sm font-black text-white leading-none">{stats.pac}</span><span className="text-[6px] md:text-[8px] text-gray-400 font-bold uppercase">PAC</span></div>
+                          <div className="flex flex-col"><span className="text-[10px] md:text-sm font-black text-white leading-none">{stats.sho}</span><span className="text-[6px] md:text-[8px] text-gray-400 font-bold uppercase">SHO</span></div>
+                          <div className="flex flex-col"><span className="text-[10px] md:text-sm font-black text-white leading-none">{stats.pas}</span><span className="text-[6px] md:text-[8px] text-gray-400 font-bold uppercase">PAS</span></div>
+                          <div className="flex flex-col"><span className="text-[10px] md:text-sm font-black text-white leading-none">{stats.dri}</span><span className="text-[6px] md:text-[8px] text-gray-400 font-bold uppercase">DRI</span></div>
+                          <div className="flex flex-col"><span className="text-[10px] md:text-sm font-black text-white leading-none">{stats.def}</span><span className="text-[6px] md:text-[8px] text-gray-400 font-bold uppercase">DEF</span></div>
+                          <div className="flex flex-col"><span className="text-[10px] md:text-sm font-black text-white leading-none">{stats.phy}</span><span className="text-[6px] md:text-[8px] text-gray-400 font-bold uppercase">PHY</span></div>
+                        </div>
+
+                        <div className="mt-2 text-yellow-500 opacity-60">
+                           <Zap className={`w-3 h-3 md:w-4 md:h-4 fill-current ${isMaxLevel ? 'drop-shadow-[0_0_10px_rgba(255,255,255,0.8)] text-white' : ''}`} />
+                        </div>
+                      </div>
+
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            );
+          })}
+        </motion.div>
+      </div>
+
+      {/* MOBILE STICKY BOTTOM BUTTON */}
+      <div className="md:hidden fixed bottom-6 left-0 right-0 px-4 z-40">
         <button 
-          onClick={() => setIsFormOpen(true)}
-          className="bg-neonBlue px-6 py-3 rounded-xl font-black uppercase text-xs tracking-widest flex items-center gap-2 hover:bg-blue-500 transition-all active:scale-95"
+          onClick={() => setIsFormOpen(true)} 
+          className="w-full bg-gradient-to-b from-yellow-300 via-yellow-500 to-yellow-600 py-4 rounded-[20px] font-black uppercase tracking-[0.2em] text-sm text-black shadow-[0_10px_25px_rgba(234,179,8,0.4)] flex items-center justify-center gap-2 active:scale-95 transition-transform border border-yellow-200"
         >
-          <Plus className="w-4 h-4" /> Add Player
+          <UserPlus className="w-5 h-5" /> Open Pack
         </button>
       </div>
 
-      {/* Player Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-        {players.map(player => (
-          <div key={player.id} className="glass-card p-6 flex flex-col items-center group relative overflow-hidden">
-            <div className="absolute top-2 right-2 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-              <button onClick={() => { setEditingPlayer(player); setFormData({ name: player.name, nickname: player.nickname }); setIsFormOpen(true); }} className="p-2 bg-white/10 rounded-lg hover:bg-neonBlue/20 text-white"><Edit2 className="w-4 h-4" /></button>
-              <button onClick={() => handleDeletePlayer(player.id)} className="p-2 bg-white/10 rounded-lg hover:bg-red-500/20 text-red-500"><Trash2 className="w-4 h-4" /></button>
-            </div>
-            
-            <div className="w-32 h-32 rounded-2xl bg-black border-2 border-white/5 mb-4 overflow-hidden shadow-2xl">
-              {player.videoUrl ? <video src={player.videoUrl} autoPlay loop muted playsInline className="w-full h-full object-cover scale-110" /> : <div className="w-full h-full flex items-center justify-center bg-gray-900"><Camera className="text-gray-700" /></div>}
-            </div>
-
-            <h3 className="text-xl font-black uppercase tracking-tighter">{player.name}</h3>
-            <p className="text-neonBlue text-[10px] font-bold tracking-[0.3em] uppercase">{player.nickname || 'N/A'}</p>
-          </div>
-        ))}
-      </div>
-
-      {/* FORM MODAL (ADD/EDIT) */}
-      {isFormOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-md p-4">
-          <div className="glass-card p-8 max-w-md w-full relative border-t-4 border-t-neonBlue">
-            <button onClick={resetForm} className="absolute top-4 right-4 text-gray-500 hover:text-white"><X /></button>
-            <h2 className="text-2xl font-black italic uppercase mb-6">{editingPlayer ? 'Edit Player' : 'Create Player'}</h2>
-            
-            <form onSubmit={handleSavePlayer} className="space-y-6">
-              <div className="space-y-2">
-                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Full Name</label>
-                <input required value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full bg-white/5 border border-white/10 p-3 rounded-xl text-white outline-none focus:border-neonBlue transition-colors" placeholder="e.g. Sudip Koirala" />
+      {/* ADD / EDIT PLAYER MODAL */}
+      <AnimatePresence>
+        {isFormOpen && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 backdrop-blur-xl p-4">
+            <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="bg-gradient-to-b from-[#1a1813] to-black border border-yellow-600 w-full max-w-md p-8 rounded-[30px] shadow-[0_0_80px_rgba(234,179,8,0.2)] relative max-h-[90vh] overflow-y-auto no-scrollbar">
+              <button onClick={resetForm} className="absolute top-6 right-6 text-gray-500 hover:text-white transition-colors p-2"><X /></button>
+              
+              <div className="text-center mb-8">
+                 <p className="text-yellow-500 text-[10px] font-black tracking-widest uppercase mb-1">Scouting Network</p>
+                 <h2 className="text-3xl font-black italic uppercase text-white drop-shadow-[0_2px_4px_rgba(0,0,0,1)]">{editingPlayer ? 'Update Item' : 'Draft Item'}</h2>
               </div>
+              
+              <form onSubmit={handleSavePlayer} className="space-y-6">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">Player Identity</label>
+                  <input required value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full bg-black/50 border border-yellow-500/30 p-4 rounded-xl text-white outline-none focus:border-yellow-500 transition-colors font-black text-sm shadow-inner" placeholder="e.g. S. Koirala" />
+                </div>
 
-              <div className="space-y-2">
-                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Nickname (Optional)</label>
-                <input value={formData.nickname} onChange={e => setFormData({...formData, nickname: e.target.value})} className="w-full bg-white/5 border border-white/10 p-3 rounded-xl text-white outline-none focus:border-neonBlue" placeholder="e.g. Chhoto" />
-              </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">Kit Name / Nickname</label>
+                  <input value={formData.nickname} onChange={e => setFormData({...formData, nickname: e.target.value})} className="w-full bg-black/50 border border-yellow-500/30 p-4 rounded-xl text-white outline-none focus:border-yellow-500 transition-colors font-black text-sm shadow-inner" placeholder="e.g. Chhoto" />
+                </div>
 
-              <div className="space-y-4">
-                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block">Profile Motion Sticker</label>
-                <div className="flex items-center gap-4">
-                  <div className="w-20 h-20 rounded-xl bg-black overflow-hidden border border-white/10">
-                    {(tempVideoUrl || editingPlayer?.videoUrl) ? <video src={tempVideoUrl || editingPlayer.videoUrl} autoPlay loop muted className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center bg-gray-900"><Video className="w-4 h-4 text-gray-700" /></div>}
+                <div className="space-y-3 pt-2">
+                  <label className="text-[10px] font-bold text-yellow-500 uppercase tracking-widest ml-1 flex items-center gap-2"><Sparkles className="w-3 h-3"/> Dynamic Image Scan</label>
+                  <div className="flex items-center gap-4 bg-black/80 p-3 rounded-2xl border border-yellow-500/20">
+                    <div className="w-20 h-24 rounded-lg overflow-hidden bg-[#0a0a0c] border border-yellow-600/50 shadow-[0_0_15px_rgba(234,179,8,0.2)] shrink-0">
+                       {(tempVideoUrl || editingPlayer?.videoUrl) ? <video src={tempVideoUrl || editingPlayer.videoUrl} autoPlay loop muted playsInline className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center"><Video className="w-5 h-5 text-yellow-600/50" /></div>}
+                    </div>
+                    <button type="button" onClick={enterStudio} className="flex-1 h-full py-5 bg-gradient-to-br from-gray-900 to-black border border-yellow-500/30 rounded-xl text-[10px] font-black active:scale-95 transition-transform uppercase tracking-widest text-yellow-500 hover:text-white hover:border-yellow-400 shadow-md">Enter Studio</button>
                   </div>
-                  <button type="button" onClick={enterStudio} className="flex-1 py-3 bg-white/5 border border-white/10 rounded-xl text-xs font-bold hover:bg-white/10 transition-colors uppercase tracking-widest">Record New Pose</button>
                 </div>
+
+                <button type="submit" className="w-full py-5 bg-gradient-to-r from-yellow-300 via-yellow-500 to-yellow-600 text-black rounded-xl font-black uppercase tracking-[0.2em] text-sm shadow-[0_5px_20px_rgba(234,179,8,0.4)] active:scale-95 transition-transform mt-4 border border-yellow-200">
+                  {editingPlayer ? 'Confirm Updates' : 'Add to Club'}
+                </button>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* HIGH-TECH STUDIO MODAL (Face Scan Laser) */}
+      <AnimatePresence>
+        {isStudioOpen && (
+          <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/95 backdrop-blur-xl p-4">
+            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="max-w-md w-full space-y-6 text-center relative">
+              <h2 className="text-yellow-500 font-black uppercase tracking-[0.4em] text-sm flex items-center justify-center gap-2"><ShieldCheck className="w-5 h-5"/> Face Scan Booth</h2>
+              
+              <div className="relative aspect-[3/4] rounded-2xl overflow-hidden bg-[#0a0a0c] border-4 border-yellow-500 shadow-[0_0_50px_rgba(234,179,8,0.3)]">
+                <div className="absolute inset-0 pointer-events-none z-10" style={{ backgroundImage: 'linear-gradient(rgba(234, 179, 8, 0.2) 1px, transparent 1px), linear-gradient(90deg, rgba(234, 179, 8, 0.2) 1px, transparent 1px)', backgroundSize: '40px 40px' }} />
+                
+                <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover scale-105" />
+                
+                {countdown === 'RECORDING!' && (
+                  <motion.div
+                    initial={{ top: '0%' }}
+                    animate={{ top: '100%' }}
+                    transition={{ duration: 1.5, repeat: Infinity, ease: 'linear' }}
+                    className="absolute left-0 right-0 h-[4px] bg-red-500 shadow-[0_0_30px_rgba(239,68,68,1)] z-20 pointer-events-none"
+                  />
+                )}
+
+                {countdown && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/40 z-10 backdrop-blur-sm">
+                    <span className={`font-black tracking-tighter ${countdown === 'RECORDING!' ? 'text-red-500 text-5xl animate-pulse drop-shadow-[0_0_20px_rgba(239,68,68,1)]' : 'text-yellow-500 text-8xl drop-shadow-[0_0_30px_rgba(234,179,8,1)]'}`}>{countdown}</span>
+                  </div>
+                )}
+                {countdown === 'RECORDING!' && (
+                  <div className="absolute top-6 right-6 w-4 h-4 bg-red-600 rounded-full animate-ping z-30 shadow-[0_0_10px_rgba(239,68,68,1)]" />
+                )}
               </div>
 
-              <button type="submit" className="w-full py-4 bg-neonBlue rounded-xl font-black uppercase tracking-widest text-sm shadow-lg shadow-blue-500/20 active:scale-95 transition-all">
-                {editingPlayer ? 'Update Profile' : 'Join Squad'}
-              </button>
-            </form>
+              <div className="flex gap-4">
+                <button onClick={closeStudio} className="flex-1 py-5 bg-black border border-white/20 rounded-xl font-black uppercase tracking-widest text-xs text-gray-400 active:bg-white/5 transition-colors">Abort</button>
+                <button onClick={startRecording} disabled={countdown !== null} className="flex-[2] py-5 bg-gradient-to-r from-yellow-500 to-yellow-600 text-black rounded-xl font-black uppercase tracking-widest text-xs disabled:opacity-50 active:scale-95 transition-transform shadow-[0_0_20px_rgba(234,179,8,0.3)]">Capture Subject</button>
+              </div>
+            </motion.div>
           </div>
-        </div>
-      )}
+        )}
+      </AnimatePresence>
 
-      {/* STUDIO MODAL */}
-      {isStudioOpen && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black p-4">
-          <div className="max-w-md w-full space-y-6 text-center">
-            <h2 className="text-neonGold font-black uppercase tracking-[0.4em] text-sm flex items-center justify-center gap-2"><ShieldCheck className="w-4 h-4"/> Studio Broadcast Mode</h2>
-            <div className="relative aspect-[3/4] rounded-3xl overflow-hidden bg-gray-900 border-4 border-white/10">
-              <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
-              {countdown && (
-                <div className="absolute inset-0 flex items-center justify-center bg-black/60">
-                  <span className={`font-black ${countdown === 'RECORDING!' ? 'text-red-500 text-3xl animate-pulse' : 'text-neonGold text-7xl'}`}>{countdown}</span>
-                </div>
-              )}
-            </div>
-            <div className="flex gap-4">
-              <button onClick={closeStudio} className="flex-1 py-4 bg-white/5 border border-white/10 rounded-2xl font-bold uppercase tracking-widest text-xs">Cancel</button>
-              <button onClick={startRecording} disabled={countdown !== null} className="flex-[2] py-4 bg-neonGold text-black rounded-2xl font-black uppercase tracking-widest text-xs disabled:opacity-50">Start 3s Capture</button>
-            </div>
-          </div>
-        </div>
-      )}
+      <style dangerouslySetInnerHTML={{ __html: `
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: rgba(255, 255, 255, 0.02); }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(234, 179, 8, 0.5); border-radius: 10px; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        input { font-size: 16px !important; }
+      `}} />
     </div>
   );
 }
