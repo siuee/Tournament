@@ -19,6 +19,15 @@ export default function Standings() {
     'eChampions League': '/assets/leagues/ucl.png'
   };
 
+  // HELPER LOGIC: Converts "First Last & First Last" to "First & First"
+  const formatTeamName = (fullName) => {
+    if (!fullName) return "Team";
+    if (fullName.includes('&')) {
+      return fullName.split('&').map(name => name.trim().split(' ')[0]).join(' & ');
+    }
+    return fullName.trim().split(' ')[0];
+  };
+
   const getSafeTime = (dateObj) => {
     if (!dateObj) return 0;
     if (typeof dateObj.toMillis === 'function') return dateObj.toMillis();
@@ -145,7 +154,6 @@ export default function Standings() {
   const itemVariants = { hidden: { opacity: 0, x: 15 }, show: { opacity: 1, x: 0, transition: { type: "spring", stiffness: 120 } } };
 
   return (
-    // Applied the deep stadium blue/black gradient and hex mesh to the main wrapper
     <div className="flex flex-col xl:flex-row gap-8 pb-20 text-white relative items-start bg-gradient-to-b from-[#020617] via-[#050b14] to-black min-h-screen hex-bg">
       
       {/* LEFT COLUMN: LEAGUE TABLES & CAREER STATS */}
@@ -160,58 +168,66 @@ export default function Standings() {
           const leagueFormat = leagueData[0].format;
 
           return (
-            <div key={groupKey} className="relative overflow-hidden rounded-[20px] bg-white/[0.02] border border-white/10 backdrop-blur-sm p-6">
+            <div key={groupKey} className="relative overflow-hidden rounded-[20px] bg-white/[0.02] border border-white/10 backdrop-blur-sm p-4 sm:p-6">
               <img src={leagueIcons[leagueType]} className="absolute -right-10 -bottom-10 w-48 h-48 object-contain opacity-[0.02] pointer-events-none" alt="" />
               
-              <div className="flex justify-between items-center mb-8 relative z-10">
+              <div className="flex justify-between items-center mb-6 relative z-10">
                 <div className="flex items-center gap-3">
-                   <h2 className="text-3xl font-black italic tracking-tighter uppercase leading-none text-transparent bg-clip-text bg-gradient-to-r from-neonBlue to-[#00ff88]">
+                   <h2 className="text-2xl sm:text-3xl font-black italic tracking-tighter uppercase leading-none text-transparent bg-clip-text bg-gradient-to-r from-neonBlue to-[#00ff88]">
                      <span className="text-neonBlue lowercase italic">e</span>{leagueType.replace('e', '')}
                    </h2>
-                   <span className="text-[9px] font-black uppercase tracking-widest bg-[#00ff88]/10 text-[#00ff88] px-2.5 py-1 rounded-full border border-[#00ff88]/20 shadow-[0_0_10px_rgba(0,255,136,0.1)]">{leagueFormat}</span>
+                   <span className="text-[9px] font-black uppercase tracking-widest bg-[#00ff88]/10 text-[#00ff88] px-2 py-1 rounded-md border border-[#00ff88]/20">{leagueFormat}</span>
                 </div>
-                <img src={leagueIcons[leagueType]} className="w-12 h-12 object-contain brightness-125 drop-shadow-[0_0_10px_rgba(0,243,255,0.3)]" alt="" />
+                <img src={leagueIcons[leagueType]} className="w-10 h-10 object-contain brightness-125 drop-shadow-[0_0_10px_rgba(0,243,255,0.3)]" alt="" />
               </div>
 
-              {/* ELECTRIC PITCH BORDER FOR TABLE */}
-              <div className="relative p-[2px] rounded-2xl bg-gradient-to-r from-neonBlue via-[#00ff88] to-neonBlue animate-gradient-border shadow-[0_0_20px_rgba(0,255,136,0.1)] z-10">
-                <div className="bg-[#050b14] rounded-2xl overflow-hidden relative pitch-lines">
-                  <div className="overflow-x-auto relative z-10">
-                    <table className="w-full text-left border-collapse">
+              {/* TIGHTER ELECTRIC PITCH BORDER TABLE */}
+              <div className="relative p-[1px] rounded-2xl bg-gradient-to-r from-neonBlue via-[#00ff88] to-neonBlue animate-gradient-border shadow-[0_0_20px_rgba(0,255,136,0.1)] z-10">
+                <div className="bg-[#050b14] rounded-[15px] overflow-hidden relative pitch-lines">
+                  <div className="overflow-x-auto relative z-10 custom-scrollbar pb-1">
+                    <table className="w-full text-left border-collapse whitespace-nowrap">
                       <thead className="bg-[#0a1120]/80 border-b border-[#00ff88]/20 backdrop-blur-md">
-                        <tr className="text-gray-400 text-[10px] uppercase tracking-widest">
-                          <th className="p-4 font-black">Pos</th>
-                          <th className="p-4 font-black">Team</th>
-                          <th className="p-4 text-center font-black">P</th>
-                          <th className="p-4 text-center font-black text-[#00ff88]">W</th>
-                          <th className="p-4 text-center font-black text-yellow-400">D</th>
-                          <th className="p-4 text-center font-black text-red-400">L</th>
-                          <th className="p-4 text-center font-black text-cyan-400">GS</th>
-                          <th className="p-4 text-center font-black text-fuchsia-400">GC</th>
-                          <th className="p-4 text-center font-black text-blue-400">GD</th>
-                          <th className="p-4 text-center text-[#00ff88] font-black">Pts</th>
-                          <th className="p-4 text-right font-black">Form</th>
+                        <tr className="text-gray-400 text-[9px] sm:text-[10px] uppercase tracking-widest">
+                          <th className="px-3 py-3 font-black text-center w-8">#</th>
+                          <th className="px-2 py-3 font-black min-w-[120px]">Team</th>
+                          <th className="px-2 py-3 text-center font-black">P</th>
+                          <th className="px-2 py-3 text-center font-black text-[#00ff88]">W</th>
+                          <th className="px-2 py-3 text-center font-black text-yellow-400">D</th>
+                          <th className="px-2 py-3 text-center font-black text-red-400">L</th>
+                          {/* CONSOLIDATED GS/GC COLUMN */}
+                          <th className="px-2 py-3 text-center font-black">GS/GC</th>
+                          <th className="px-2 py-3 text-center font-black text-blue-400">GD</th>
+                          <th className="px-3 py-3 text-center text-[#00ff88] font-black">Pts</th>
+                          <th className="px-3 py-3 text-right font-black">Form</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-white/5">
                         {leagueData.map((team, i) => (
                           <tr key={i} className="hover:bg-white/5 transition-colors group">
-                            <td className="p-4 font-black text-gray-500">#{i + 1}</td>
-                            <td className="p-4 font-black text-lg uppercase tracking-tighter group-hover:text-transparent group-hover:bg-clip-text group-hover:bg-gradient-to-r group-hover:from-neonBlue group-hover:to-[#00ff88] transition-all">{team.name}</td>
-                            <td className="p-4 text-center text-gray-400 font-bold">{team.mp}</td>
-                            <td className="p-4 text-center text-[#00ff88] font-bold">{team.w}</td>
-                            <td className="p-4 text-center text-yellow-400 font-bold">{team.d}</td>
-                            <td className="p-4 text-center text-red-400 font-bold">{team.l}</td>
-                            <td className="p-4 text-center text-cyan-400 font-bold">{team.gs}</td>
-                            <td className="p-4 text-center text-fuchsia-400 font-bold">{team.gc}</td>
-                            <td className={`p-4 text-center font-black ${team.gd > 0 ? 'text-[#00ff88]' : team.gd < 0 ? 'text-red-400' : 'text-gray-400'}`}>
+                            <td className="px-3 py-2.5 text-center font-black text-gray-600 text-xs">{i + 1}</td>
+                            <td className="px-2 py-2.5 font-black text-sm uppercase tracking-tighter group-hover:text-transparent group-hover:bg-clip-text group-hover:bg-gradient-to-r group-hover:from-neonBlue group-hover:to-[#00ff88] transition-all">
+                              {formatTeamName(team.name)}
+                            </td>
+                            <td className="px-2 py-2.5 text-center text-gray-400 font-bold text-xs">{team.mp}</td>
+                            <td className="px-2 py-2.5 text-center text-[#00ff88] font-bold text-xs">{team.w}</td>
+                            <td className="px-2 py-2.5 text-center text-yellow-400 font-bold text-xs">{team.d}</td>
+                            <td className="px-2 py-2.5 text-center text-red-400 font-bold text-xs">{team.l}</td>
+                            
+                            {/* COMBINED GOALS DATA */}
+                            <td className="px-2 py-2.5 text-center font-black text-xs tracking-wider">
+                              <span className="text-cyan-400">{team.gs}</span>
+                              <span className="text-gray-600 mx-0.5">/</span>
+                              <span className="text-fuchsia-400">{team.gc}</span>
+                            </td>
+                            
+                            <td className={`px-2 py-2.5 text-center font-black text-xs ${team.gd > 0 ? 'text-[#00ff88]' : team.gd < 0 ? 'text-red-400' : 'text-gray-500'}`}>
                               {team.gd > 0 ? `+${team.gd}` : team.gd}
                             </td>
-                            <td className="p-4 text-center font-black text-2xl text-[#00ff88] drop-shadow-[0_0_5px_rgba(0,255,136,0.3)] italic">{team.pts || 0}</td>
-                            <td className="p-4">
+                            <td className="px-3 py-2.5 text-center font-black text-xl text-[#00ff88] drop-shadow-[0_0_5px_rgba(0,255,136,0.3)] italic leading-none">{team.pts || 0}</td>
+                            <td className="px-3 py-2.5">
                               <div className="flex justify-end gap-1">
                                 {team.form.map((f, idx) => (
-                                  <div key={idx} className={`w-6 h-6 rounded flex items-center justify-center text-[10px] font-black border ${f === 'W' ? 'bg-[#00ff88]/20 border-[#00ff88]/50 text-[#00ff88]' : f === 'D' ? 'bg-yellow-500/20 border-yellow-500/50 text-yellow-400' : 'bg-red-500/20 border-red-500/50 text-red-400'}`}>{f}</div>
+                                  <div key={idx} className={`w-5 h-5 rounded flex items-center justify-center text-[9px] font-black border ${f === 'W' ? 'bg-[#00ff88]/20 border-[#00ff88]/50 text-[#00ff88]' : f === 'D' ? 'bg-yellow-500/20 border-yellow-500/50 text-yellow-400' : 'bg-red-500/20 border-red-500/50 text-red-400'}`}>{f}</div>
                                 ))}
                               </div>
                             </td>
@@ -240,7 +256,7 @@ export default function Standings() {
         </div>
       </div>
 
-      {/* RIGHT COLUMN: SMART STICKY HUD */}
+      {/* RIGHT COLUMN: SMART STICKY HUD - Reverted custom-scrollbar to no-scrollbar */}
       <div className="w-full xl:w-[380px] flex flex-col gap-8 xl:sticky xl:top-6 xl:max-h-[calc(100vh-48px)] overflow-y-auto no-scrollbar pr-1 pb-6 transform-gpu" style={{ WebkitMaskImage: 'linear-gradient(to bottom, black 95%, transparent 100%)', maskImage: 'linear-gradient(to bottom, black 95%, transparent 100%)' }}>
         
         {/* WIDGET 1: DYNAMIC GOLDEN BOOT */}
@@ -280,7 +296,7 @@ export default function Standings() {
                       <div className="absolute -bottom-2 -right-2 bg-neonGold text-black text-[10px] font-black px-1.5 py-0.5 rounded border border-[#121212]">#1</div>
                     </div>
                     <div className="flex-1">
-                      <p className="font-black uppercase tracking-tighter text-lg leading-none truncate text-white group-hover:text-neonGold transition-colors">{activeGBPlayers[0].name}</p>
+                      <p className="font-black uppercase tracking-tighter text-lg leading-none truncate text-white group-hover:text-neonGold transition-colors">{activeGBPlayers[0].name.split(' ')[0]}</p>
                       <p className="text-[9px] text-yellow-500 font-bold uppercase tracking-widest mt-1">Top Scorer</p>
                     </div>
                     <div className="text-right">
@@ -300,7 +316,7 @@ export default function Standings() {
                     <div className={`w-10 h-10 rounded-full border-2 mb-2 overflow-hidden bg-black ${idx === 1 ? 'border-gray-400 shadow-[0_0_10px_rgba(156,163,175,0.2)]' : 'border-orange-600 shadow-[0_0_10px_rgba(234,88,12,0.2)]'}`}>
                       {activeGBPlayers[idx].videoUrl ? <video src={activeGBPlayers[idx].videoUrl} autoPlay loop muted playsInline className="w-full h-full object-cover" /> : <div className="w-full h-full bg-gray-900" />}
                     </div>
-                    <p className="font-black uppercase text-[10px] text-gray-300 truncate w-full mb-1">{activeGBPlayers[idx].name}</p>
+                    <p className="font-black uppercase text-[10px] text-gray-300 truncate w-full mb-1">{activeGBPlayers[idx].name.split(' ')[0]}</p>
                     <div className="flex items-center gap-1.5 bg-black/40 px-3 py-1 rounded-full border border-white/5">
                       <Goal className={`w-3 h-3 ${idx === 1 ? 'text-gray-400' : 'text-orange-500'}`} />
                       <span className="font-black italic text-sm text-white">{gbFormat === '1v1' ? (activeGBPlayers[idx].goals1v1 || 0) : (activeGBPlayers[idx].goals2v2 || 0)}</span>
@@ -319,7 +335,7 @@ export default function Standings() {
                         <div className="w-7 h-7 rounded-full overflow-hidden bg-black border border-white/10">
                           {player.videoUrl ? <video src={player.videoUrl} autoPlay loop muted playsInline className="w-full h-full object-cover" /> : <div className="w-full h-full bg-gray-900" />}
                         </div>
-                        <p className="font-black uppercase text-[10px] text-gray-400 truncate max-w-[100px]">{player.name}</p>
+                        <p className="font-black uppercase text-[10px] text-gray-400 truncate max-w-[100px]">{player.name.split(' ')[0]}</p>
                       </div>
                       <div className="flex items-center gap-1.5 px-2">
                         <span className="font-black italic text-sm text-gray-300">{gbFormat === '1v1' ? (player.goals1v1 || 0) : (player.goals2v2 || 0)}</span>
@@ -346,7 +362,7 @@ export default function Standings() {
             <Sparkles className="w-5 h-5 text-neonGold animate-pulse opacity-50" />
           </div>
 
-          <motion.div variants={containerVariants} initial="hidden" animate="show" className="space-y-4 relative z-10 no-scrollbar overflow-visible pr-1">
+          <motion.div variants={containerVariants} initial="hidden" animate="show" className="space-y-4 relative z-10 overflow-visible pr-1">
             {ballonDorPlayers.map((player, idx) => {
               
               let rankStyle = {};
@@ -369,7 +385,7 @@ export default function Standings() {
                       </div>
                       
                       <div>
-                        <p className="text-xs font-black uppercase tracking-tighter leading-none mb-1 text-white truncate max-w-[120px]">{player.name}</p>
+                        <p className="text-xs font-black uppercase tracking-tighter leading-none mb-1 text-white truncate max-w-[120px]">{player.name.split(' ')[0]}</p>
                         <div className="flex gap-2 items-center leading-none">
                            <span className={`text-[7px] font-black tracking-widest uppercase border px-1 rounded-sm ${rankStyle.text} border-current opacity-70`}>{rankStyle.badge}</span>
                            <span className="text-[9px] text-gray-500 font-bold uppercase flex gap-1 items-baseline"><span className="text-gray-300 leading-none">{player.tGoals || 0}</span>G</span>
@@ -405,6 +421,22 @@ export default function Standings() {
       </div>
 
       <style jsx global>{`
+        /* CUSTOM SCROLLBAR - ONLY FOR TABLES NOW */
+        .custom-scrollbar::-webkit-scrollbar {
+          height: 6px; /* Horizontal scrollbar height */
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+          background: rgba(0, 255, 136, 0.02);
+          border-radius: 10px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+          background: linear-gradient(to right, rgba(0, 255, 136, 0.4), rgba(0, 243, 255, 0.4));
+          border-radius: 10px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+          background: linear-gradient(to right, rgba(0, 255, 136, 0.8), rgba(0, 243, 255, 0.8));
+        }
+
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
@@ -457,7 +489,6 @@ function PlayerStatRow({ player }) {
         
         {/* Top Profile Section */}
         <div className="flex items-center gap-4 p-4 border-b border-white/5 relative overflow-hidden">
-          {/* Subtle graphic inside card */}
           <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-white/5 to-transparent rounded-full -translate-y-1/2 translate-x-1/2 pointer-events-none" />
           
           <div className="relative">
@@ -471,7 +502,8 @@ function PlayerStatRow({ player }) {
           </div>
           
           <div className="flex-1">
-            <p className="font-black text-sm uppercase tracking-tighter leading-none text-white group-hover:text-[#00ff88] transition-colors">{player.name}</p>
+            {/* Using first name logic here too for consistency! */}
+            <p className="font-black text-sm uppercase tracking-tighter leading-none text-white group-hover:text-[#00ff88] transition-colors">{player.name.split(' ')[0]}</p>
             <p className="text-[9px] text-gray-500 font-bold uppercase mt-1 tracking-widest">Career G/A</p>
           </div>
         </div>
