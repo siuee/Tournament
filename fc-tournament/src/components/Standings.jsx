@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Trophy, Crown, TrendingUp, Loader2, Goal, Medal, Flame, Users, User, Sparkles, Activity } from 'lucide-react';
 import { db } from '../firebase';
 import { toTitleCase } from '../lib/utils';
+import { PlayerCareerCard } from './ui/player-career-card';
 import { collection, getDocs, query, orderBy } from 'firebase/firestore';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -244,13 +245,19 @@ export default function Standings() {
         {/* FC ULTIMATE TEAM STYLE CAREER STATS */}
         <div className="relative overflow-visible rounded-[20px] bg-white/[0.02] border border-white/10 backdrop-blur-sm p-4 sm:p-6 w-full min-w-0">
           <div className="flex items-center gap-3 mb-6 sm:mb-8">
-             <Activity className="w-6 h-6 text-[#00ff88] shrink-0" /> 
-             <h3 className="text-xl sm:text-2xl font-black text-white italic tracking-tighter uppercase">Squad Career Stats</h3>
+             <Activity className="w-6 h-6 text-[#00ff88] shrink-0 drop-shadow-[0_0_10px_rgba(0,255,136,0.5)]" /> 
+             <h3 className="text-2xl sm:text-3xl font-black italic tracking-tighter uppercase leading-none text-transparent bg-clip-text bg-gradient-to-r from-neonBlue to-[#00ff88] drop-shadow-[0_0_20px_rgba(0,255,136,0.3)]">Squad Career Stats</h3>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-5 w-full min-w-0">
-            {players.map(player => (
-              <PlayerStatRow key={player.id} player={player} />
-            ))}
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6 sm:gap-8 w-full min-w-0">
+            {players.map((player, idx) => {
+              const themes = ['160 70% 35%', '250 50% 30%', '30 70% 45%', '200 60% 40%'];
+              const themeColor = themes[idx % themes.length];
+              return (
+                <div key={player.id} className="w-full max-w-[340px] h-[420px] mx-auto sm:mx-0">
+                  <PlayerCareerCard player={player} themeColor={themeColor} />
+                </div>
+              );
+            })}
           </div>
         </div>
       </div>
@@ -479,56 +486,3 @@ export default function Standings() {
 }
 
 // FC ULTIMATE TEAM STYLE PLAYER CARD
-function PlayerStatRow({ player }) {
-  const totalRating = (player.tGoals || 0) + (player.tAssists || 0);
-  
-  // Dynamic border glow based on how high their rating is
-  const isTopTier = totalRating >= 15;
-  const cardBorder = isTopTier ? "border-neonGold shadow-[0_0_15px_rgba(212,175,55,0.15)]" : "border-white/10 hover:border-[#00ff88]/50";
-  const glow = isTopTier ? "from-yellow-500/10" : "from-[#00ff88]/5";
-
-  return (
-    <div className={`relative p-[1px] rounded-[18px] bg-gradient-to-b ${glow} to-transparent overflow-hidden group transition-all w-full min-w-0`}>
-      <div className={`flex flex-col h-full min-h-0 bg-[#0a1120]/90 rounded-[17px] border ${cardBorder} transition-colors backdrop-blur-sm`}>
-        
-        {/* Top Profile Section */}
-        <div className="flex items-center gap-3 sm:gap-4 p-3 sm:p-4 border-b border-white/5 relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-white/5 to-transparent rounded-full -translate-y-1/2 translate-x-1/2 pointer-events-none" />
-          
-          <div className="relative shrink-0">
-            <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full border-2 border-white/20 overflow-hidden bg-black shadow-lg">
-               {player.videoUrl ? <video src={player.videoUrl} autoPlay loop muted playsInline className="w-full h-full object-cover scale-110" /> : <div className="w-full h-full bg-gray-800" />}
-            </div>
-            {/* OVR Rating Badge */}
-            <div className={`absolute -bottom-2 -right-2 w-7 h-7 flex items-center justify-center rounded-lg border-2 border-[#0a1120] font-black text-[10px] ${isTopTier ? 'bg-neonGold text-black' : 'bg-[#00ff88] text-black'}`}>
-               {totalRating}
-            </div>
-          </div>
-          
-          <div className="flex-1">
-            {/* Using first name logic here too for consistency! */}
-            <p className="font-sport font-semibold text-lg tracking-wide leading-none text-white group-hover:text-[#00ff88] transition-colors">{toTitleCase(player?.name || '').split(' ')[0]}</p>
-            <p className="text-[9px] text-gray-500 font-bold uppercase mt-1 tracking-widest">Career G/A</p>
-          </div>
-        </div>
-
-        {/* Bottom Attributes Section (EA FC Style Grid) */}
-        <div className="grid grid-cols-3 divide-x divide-white/5 p-2 sm:p-3 bg-black/40 min-w-0">
-          <div className="flex flex-col items-center justify-center">
-             <p className="text-sm font-black text-white leading-none">{player.goals1v1 || 0}</p>
-             <p className="text-[8px] text-gray-500 uppercase font-bold mt-1 tracking-widest">1v1 Gls</p>
-          </div>
-          <div className="flex flex-col items-center justify-center">
-             <p className="text-sm font-black text-white leading-none">{player.goals2v2 || 0}</p>
-             <p className="text-[8px] text-gray-500 uppercase font-bold mt-1 tracking-widest">2v2 Gls</p>
-          </div>
-          <div className="flex flex-col items-center justify-center">
-             <p className="text-sm font-black text-white leading-none">{player.assists2v2 || 0}</p>
-             <p className="text-[8px] text-gray-500 uppercase font-bold mt-1 tracking-widest">2v2 Ast</p>
-          </div>
-        </div>
-
-      </div>
-    </div>
-  );
-}

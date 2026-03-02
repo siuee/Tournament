@@ -13,6 +13,8 @@ export default function LockerRoom() {
   const [editingPlayer, setEditingPlayer] = useState(null);
   const [loading, setLoading] = useState(true);
   
+  const clickOriginRef = useRef({ x: 0, y: 0 });
+
   // Form State
   const [formData, setFormData] = useState({ name: '', nickname: '' });
   const [tempVideoUrl, setTempVideoUrl] = useState(null);
@@ -25,6 +27,19 @@ export default function LockerRoom() {
   const videoRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const chunksRef = useRef([]);
+
+  const openWithClick = (handler, e) => {
+    if (e?.clientX != null && e?.clientY != null) {
+      clickOriginRef.current = { x: e.clientX, y: e.clientY };
+    }
+    handler?.();
+  };
+
+  const getClickOriginVariant = () => {
+    const o = clickOriginRef.current;
+    if (typeof window === 'undefined') return { scale: 0, opacity: 0, x: 0, y: 0 };
+    return { scale: 0, opacity: 0, x: o.x - window.innerWidth / 2, y: o.y - window.innerHeight / 2 };
+  };
 
   useEffect(() => {
     fetchPlayersAndSyncSeason();
@@ -136,7 +151,10 @@ export default function LockerRoom() {
   };
 
   // --- STUDIO LOGIC ---
-  const enterStudio = async () => {
+  const enterStudio = async (e) => {
+    if (e?.clientX != null && e?.clientY != null) {
+      clickOriginRef.current = { x: e.clientX, y: e.clientY };
+    }
     setIsStudioOpen(true);
     try {
       const mediaStream = await navigator.mediaDevices.getUserMedia({ video: true });
@@ -261,12 +279,14 @@ export default function LockerRoom() {
               </div>
             </div>
          </div>
-         <button 
-           onClick={() => setIsFormOpen(true)}
-           className="hidden md:flex bg-gradient-to-b from-yellow-300 via-yellow-500 to-yellow-600 px-6 py-3 rounded-xl font-black uppercase text-xs tracking-widest text-black shadow-[0_0_20px_rgba(234,179,8,0.4)] hover:scale-105 active:scale-95 transition-all items-center gap-2 border border-yellow-200/50"
+         <motion.button 
+           onClick={(e) => openWithClick(() => setIsFormOpen(true), e)}
+           whileHover={{ scale: 1.05 }}
+           whileTap={{ scale: 0.95 }}
+           className="hidden md:flex bg-gradient-to-b from-yellow-300 via-yellow-500 to-yellow-600 px-6 py-3 rounded-xl font-black uppercase text-xs tracking-widest text-black shadow-[0_0_20px_rgba(234,179,8,0.4)] items-center gap-2 border border-yellow-200/50"
          >
            <UserPlus className="w-4 h-4" /> Open Pack
-         </button>
+         </motion.button>
       </div>
 
       {/* FC PLAYER CARDS GRID */}
@@ -296,8 +316,8 @@ export default function LockerRoom() {
                   
                   {/* EDIT/DELETE ACTIONS */}
                   <div className="absolute -top-3 -right-3 flex gap-2 z-50 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                    <button onClick={(e) => { e.stopPropagation(); setEditingPlayer(player); setFormData({ name: player.name, nickname: player.nickname }); setIsFormOpen(true); }} className="p-2 bg-yellow-500 text-black rounded-full shadow-lg hover:scale-110 active:scale-95"><Edit2 className="w-3.5 h-3.5" /></button>
-                    <button onClick={(e) => { e.stopPropagation(); handleDeletePlayer(player.id); }} className="p-2 bg-red-600 text-white rounded-full shadow-lg hover:scale-110 active:scale-95"><Trash2 className="w-3.5 h-3.5" /></button>
+                    <motion.button onClick={(e) => { e.stopPropagation(); setEditingPlayer(player); setFormData({ name: player.name, nickname: player.nickname }); setIsFormOpen(true); }} whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.95 }} className="p-2 bg-yellow-500 text-black rounded-full shadow-lg"><Edit2 className="w-3.5 h-3.5" /></motion.button>
+                    <motion.button onClick={(e) => { e.stopPropagation(); handleDeletePlayer(player.id); }} whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.95 }} className="p-2 bg-red-600 text-white rounded-full shadow-lg"><Trash2 className="w-3.5 h-3.5" /></motion.button>
                   </div>
 
                   {/* OUTER GOLD BORDER */}
@@ -383,19 +403,27 @@ export default function LockerRoom() {
 
       {/* MOBILE STICKY BOTTOM BUTTON */}
       <div className="md:hidden fixed bottom-6 left-0 right-0 px-4 z-40">
-        <button 
-          onClick={() => setIsFormOpen(true)} 
-          className="w-full bg-gradient-to-b from-yellow-300 via-yellow-500 to-yellow-600 py-4 rounded-[20px] font-black uppercase tracking-[0.2em] text-sm text-black shadow-[0_10px_25px_rgba(234,179,8,0.4)] flex items-center justify-center gap-2 active:scale-95 transition-transform border border-yellow-200"
+        <motion.button 
+          onClick={(e) => openWithClick(() => setIsFormOpen(true), e)} 
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+          className="w-full bg-gradient-to-b from-yellow-300 via-yellow-500 to-yellow-600 py-4 rounded-[20px] font-black uppercase tracking-[0.2em] text-sm text-black shadow-[0_10px_25px_rgba(234,179,8,0.4)] flex items-center justify-center gap-2 border border-yellow-200"
         >
           <UserPlus className="w-5 h-5" /> Open Pack
-        </button>
+        </motion.button>
       </div>
 
       {/* ADD / EDIT PLAYER MODAL */}
       <AnimatePresence>
         {isFormOpen && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 backdrop-blur-xl p-4">
-            <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="bg-gradient-to-b from-[#1a1813] to-black border border-yellow-600 w-full max-w-md p-8 rounded-[30px] shadow-[0_0_80px_rgba(234,179,8,0.2)] relative max-h-[90vh] overflow-y-auto no-scrollbar">
+            <motion.div
+              initial={getClickOriginVariant()}
+              animate={{ scale: 1, opacity: 1, x: 0, y: 0 }}
+              exit={getClickOriginVariant()}
+              transition={{ type: "spring", stiffness: 350, damping: 28 }}
+              className="bg-gradient-to-b from-[#1a1813] to-black border border-yellow-600 w-full max-w-md p-8 rounded-[30px] shadow-[0_0_80px_rgba(234,179,8,0.2)] relative max-h-[90vh] overflow-y-auto no-scrollbar"
+            >
               <button onClick={resetForm} className="absolute top-6 right-6 text-gray-500 hover:text-white transition-colors p-2"><X /></button>
               
               <div className="text-center mb-8">
@@ -420,13 +448,13 @@ export default function LockerRoom() {
                     <div className="w-20 h-24 rounded-lg overflow-hidden bg-[#0a0a0c] border border-yellow-600/50 shadow-[0_0_15px_rgba(234,179,8,0.2)] shrink-0">
                        {(tempVideoUrl || editingPlayer?.videoUrl) ? <video src={tempVideoUrl || editingPlayer.videoUrl} autoPlay loop muted playsInline className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center"><Video className="w-5 h-5 text-yellow-600/50" /></div>}
                     </div>
-                    <button type="button" onClick={enterStudio} className="flex-1 h-full py-5 bg-gradient-to-br from-gray-900 to-black border border-yellow-500/30 rounded-xl text-[10px] font-black active:scale-95 transition-transform uppercase tracking-widest text-yellow-500 hover:text-white hover:border-yellow-400 shadow-md">Enter Studio</button>
+                    <motion.button type="button" onClick={(ev) => enterStudio(ev)} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} className="flex-1 h-full py-5 bg-gradient-to-br from-gray-900 to-black border border-yellow-500/30 rounded-xl text-[10px] font-black uppercase tracking-widest text-yellow-500 hover:text-white hover:border-yellow-400 shadow-md">Enter Studio</motion.button>
                   </div>
                 </div>
 
-                <button type="submit" className="w-full py-5 bg-gradient-to-r from-yellow-300 via-yellow-500 to-yellow-600 text-black rounded-xl font-black uppercase tracking-[0.2em] text-sm shadow-[0_5px_20px_rgba(234,179,8,0.4)] active:scale-95 transition-transform mt-4 border border-yellow-200">
+                <motion.button type="submit" whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} className="w-full py-5 bg-gradient-to-r from-yellow-300 via-yellow-500 to-yellow-600 text-black rounded-xl font-black uppercase tracking-[0.2em] text-sm shadow-[0_5px_20px_rgba(234,179,8,0.4)] mt-4 border border-yellow-200">
                   {editingPlayer ? 'Confirm Updates' : 'Add to Club'}
-                </button>
+                </motion.button>
               </form>
             </motion.div>
           </div>
@@ -437,7 +465,13 @@ export default function LockerRoom() {
       <AnimatePresence>
         {isStudioOpen && (
           <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/95 backdrop-blur-xl p-4">
-            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="max-w-md w-full space-y-6 text-center relative">
+            <motion.div
+              initial={getClickOriginVariant()}
+              animate={{ scale: 1, opacity: 1, x: 0, y: 0 }}
+              exit={getClickOriginVariant()}
+              transition={{ type: "spring", stiffness: 350, damping: 28 }}
+              className="max-w-md w-full space-y-6 text-center relative"
+            >
               <h2 className="text-yellow-500 font-black uppercase tracking-[0.4em] text-sm flex items-center justify-center gap-2"><ShieldCheck className="w-5 h-5"/> Face Scan Booth</h2>
               
               <div className="relative aspect-[3/4] rounded-2xl overflow-hidden bg-[#0a0a0c] border-4 border-yellow-500 shadow-[0_0_50px_rgba(234,179,8,0.3)]">
@@ -465,8 +499,8 @@ export default function LockerRoom() {
               </div>
 
               <div className="flex gap-4">
-                <button onClick={closeStudio} className="flex-1 py-5 bg-black border border-white/20 rounded-xl font-black uppercase tracking-widest text-xs text-gray-400 active:bg-white/5 transition-colors">Abort</button>
-                <button onClick={startRecording} disabled={countdown !== null} className="flex-[2] py-5 bg-gradient-to-r from-yellow-500 to-yellow-600 text-black rounded-xl font-black uppercase tracking-widest text-xs disabled:opacity-50 active:scale-95 transition-transform shadow-[0_0_20px_rgba(234,179,8,0.3)]">Capture Subject</button>
+                <motion.button onClick={closeStudio} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} className="flex-1 py-5 bg-black border border-white/20 rounded-xl font-black uppercase tracking-widest text-xs text-gray-400 hover:bg-white/5">Abort</motion.button>
+                <motion.button onClick={startRecording} disabled={countdown !== null} whileHover={{ scale: countdown === null ? 1.02 : 1 }} whileTap={{ scale: 0.98 }} className="flex-[2] py-5 bg-gradient-to-r from-yellow-500 to-yellow-600 text-black rounded-xl font-black uppercase tracking-widest text-xs disabled:opacity-50 shadow-[0_0_20px_rgba(234,179,8,0.3)]">Capture Subject</motion.button>
               </div>
             </motion.div>
           </div>
