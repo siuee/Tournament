@@ -3,6 +3,7 @@ import { Trophy, Crown, TrendingUp, Loader2, Goal, Medal, Flame, Users, User, Sp
 import { db } from '../firebase';
 import { collection, getDocs, query, orderBy } from 'firebase/firestore';
 import { motion, AnimatePresence } from 'framer-motion';
+import { StarShockwaves } from './ui/star-shockwaves';
 
 export default function Standings() {
   const [players, setPlayers] = useState([]);
@@ -134,12 +135,17 @@ export default function Standings() {
   }, []);
 
   if (loading) return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-[#050b14]">
-      <div className="relative w-16 h-16 flex items-center justify-center">
-        <Loader2 className="w-12 h-12 text-[#00ff88] animate-spin absolute" />
-        <Goal className="w-5 h-5 text-neonBlue animate-pulse" />
+    <div className="relative min-h-screen flex flex-col items-center justify-center text-white overflow-hidden">
+      <div className="fixed inset-0 -z-10">
+        <StarShockwaves />
       </div>
-      <h2 className="text-white font-black italic tracking-tighter mt-4 animate-pulse uppercase">Syncing Pitch Data...</h2>
+      <div className="relative z-10 flex flex-col items-center">
+        <div className="relative w-16 h-16 flex items-center justify-center">
+          <Loader2 className="w-12 h-12 text-[#00ff88] animate-spin absolute" />
+          <Goal className="w-5 h-5 text-neonBlue animate-pulse" />
+        </div>
+        <h2 className="text-white font-black italic tracking-tighter mt-4 animate-pulse uppercase">Syncing Pitch Data...</h2>
+      </div>
     </div>
   );
 
@@ -154,7 +160,10 @@ export default function Standings() {
   const itemVariants = { hidden: { opacity: 0, x: 15 }, show: { opacity: 1, x: 0, transition: { type: "spring", stiffness: 120 } } };
 
   return (
-    <div className="flex flex-col xl:flex-row gap-8 pb-20 text-white relative items-start bg-gradient-to-b from-[#020617] via-[#050b14] to-black min-h-screen hex-bg">
+    <div className="relative min-h-screen flex flex-col xl:flex-row gap-8 pb-20 text-white items-start">
+      <div className="fixed inset-0 -z-10">
+        <StarShockwaves />
+      </div>
       
       {/* LEFT COLUMN: LEAGUE TABLES & CAREER STATS */}
       <div className="flex-1 space-y-12 xl:max-w-[calc(100%-410px)] relative z-10">

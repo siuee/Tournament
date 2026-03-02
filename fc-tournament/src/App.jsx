@@ -199,6 +199,9 @@ function App() {
           </AnimatePresence>
         </main>
 
+        {/* Global StarShockwaves controls (theme, pulse, animate) */}
+        <ShockwaveControls />
+
         {/* --- MOBILE CONSOLE TAB BAR --- */}
         <nav className="md:hidden fixed bottom-6 left-4 right-4 z-[100]">
           <motion.div 
@@ -310,5 +313,74 @@ const MobTab = ({ icon, label, active, onClick, minion, bello }) => (
     </span>
   </button>
 );
+
+// Global controls for StarShockwaves background (communicates via window events)
+const ShockwaveControls = () => {
+  const [theme, setTheme] = useState('molten');
+  const [animate, setAnimate] = useState(true);
+
+  const sendTheme = (t) => {
+    setTheme(t);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('starshockwaves-theme', { detail: t }));
+    }
+  };
+
+  const pulse = () => {
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('starshockwaves-pulse'));
+    }
+  };
+
+  const toggleAnimate = () => {
+    const next = !animate;
+    setAnimate(next);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('starshockwaves-animate', { detail: next }));
+    }
+  };
+
+  return (
+    <div className="fixed bottom-4 left-4 z-[200] flex flex-col gap-3">
+      <div className="rounded-2xl bg-black/70 border border-white/10 backdrop-blur-xl px-3 py-2 flex flex-wrap items-center gap-2">
+        <span className="text-[9px] font-black uppercase tracking-[0.2em] text-gray-400 mr-1">
+          Theme
+        </span>
+        {['molten', 'cosmic', 'emerald'].map((t) => (
+          <button
+            key={t}
+            onClick={() => sendTheme(t)}
+            className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border ${
+              theme === t
+                ? 'bg-yellow-400 text-black border-yellow-300 shadow-[0_0_12px_rgba(250,204,21,0.5)]'
+                : 'bg-white/5 text-gray-300 border-white/10 hover:border-yellow-400 hover:text-yellow-300'
+            }`}
+          >
+            {t}
+          </button>
+        ))}
+      </div>
+
+      <div className="rounded-2xl bg-black/70 border border-white/10 backdrop-blur-xl px-3 py-2 flex items-center gap-3">
+        <button
+          onClick={pulse}
+          className="px-4 py-1.5 rounded-xl bg-yellow-500 text-black text-[10px] font-black uppercase tracking-[0.18em] shadow-[0_0_12px_rgba(234,179,8,0.6)] hover:scale-105 active:scale-95 transition-transform"
+        >
+          Pulse
+        </button>
+        <button
+          onClick={toggleAnimate}
+          className={`px-4 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-[0.18em] border transition-all ${
+            animate
+              ? 'bg-emerald-500/20 text-emerald-300 border-emerald-400'
+              : 'bg-white/5 text-gray-300 border-white/10'
+          }`}
+        >
+          {animate ? 'Animate On' : 'Animate Off'}
+        </button>
+      </div>
+    </div>
+  );
+};
 
 export default App;

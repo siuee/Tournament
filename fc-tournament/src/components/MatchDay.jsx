@@ -4,6 +4,7 @@ import { db } from '../firebase';
 import { collection, getDocs, addDoc, deleteDoc, doc, updateDoc, query, orderBy, limit } from 'firebase/firestore';
 import { Plus, Users, User, X, Trash2, Goal, Star, Trophy, Sword, AlertCircle, History, UserPlus } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { StarShockwaves } from './ui/star-shockwaves';
 
 export default function MatchDay({ belloMode, onGoalScored }) {
   const [players, setPlayers] = useState([]);
@@ -165,10 +166,13 @@ export default function MatchDay({ belloMode, onGoalScored }) {
   };
 
   return (
-    <motion.div animate={screenShake ? { x: [-10, 10, -10, 10, 0] } : {}} className="space-y-12 p-4 md:p-8 min-h-screen relative text-white">
-      {/* Background Mesh */}
-      <div className="fixed inset-0 z-[-1] bg-[#050505]" />
-      <div className="fixed inset-0 z-[-1] opacity-[0.03] pointer-events-none" style={{ backgroundImage: 'radial-gradient(circle at 2px 2px, #ffd700 1px, transparent 0)', backgroundSize: '24px 24px' }} />
+    <motion.div
+      animate={screenShake ? { x: [-10, 10, -10, 10, 0] } : {}}
+      className="space-y-12 p-4 md:p-8 min-h-screen relative text-white overflow-hidden"
+    >
+      <div className="fixed inset-0 -z-10">
+        <StarShockwaves />
+      </div>
 
       {/* Header - Stacks on mobile, inline on desktop */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6 mb-10 border-b border-yellow-500/20 pb-6">
