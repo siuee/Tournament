@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { Camera, Plus, X, Video, Trash2, Edit2, ShieldCheck, UserPlus, Sparkles, Hash, Zap, TrendingUp, CalendarDays } from 'lucide-react';
+import { toTitleCase } from '../lib/utils';
 import { db, storage } from '../firebase';
 import { collection, getDocs, doc, setDoc, deleteDoc, writeBatch } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -318,14 +319,14 @@ export default function LockerRoom() {
                       {/* TOP LEFT: OVR & POSITION */}
                       <div className="absolute top-4 left-3 md:top-5 md:left-4 flex flex-col items-center z-20 drop-shadow-[0_2px_4px_rgba(0,0,0,1)]">
                         <span className={`text-2xl md:text-3xl font-black leading-none tracking-tighter ${isMaxLevel ? 'text-transparent bg-clip-text bg-gradient-to-b from-white to-yellow-200 drop-shadow-[0_0_10px_rgba(255,255,255,0.5)]' : 'text-white'}`}>{stats.ovr}</span>
-                        <span className="text-[10px] md:text-xs font-black text-yellow-500 uppercase tracking-widest leading-none mt-0.5">ST</span>
+                        <span className="text-xs md:text-sm font-black text-yellow-500 uppercase tracking-widest leading-none mt-0.5">ST</span>
                         <div className="w-6 h-[1px] bg-yellow-500/50 mt-1 mb-1" />
                         <img src="/assets/leagues/intl.jpg" className="w-4 h-3 md:w-5 md:h-4 object-cover rounded-[1px] opacity-90" alt="Nation" />
                       </div>
 
                       {/* CLUB RANK BADGE */}
                       <div className="absolute top-4 right-3 md:top-5 md:right-4 flex flex-col items-center z-20 opacity-60 group-hover:opacity-100 transition-opacity">
-                        <span className="text-[8px] font-black uppercase tracking-widest text-yellow-500 leading-none mb-0.5">Rank</span>
+                        <span className="text-[10px] font-black uppercase tracking-widest text-yellow-500 leading-none mb-0.5">Rank</span>
                         <span className="text-sm font-black text-white italic">#{idx + 1}</span>
                       </div>
 
@@ -345,12 +346,12 @@ export default function LockerRoom() {
                         
                         <div className="flex flex-col items-center w-full px-4 mb-1">
                           {first && (
-                            <span className="text-[9px] md:text-[11px] text-yellow-500 font-bold uppercase tracking-[0.3em] leading-none mb-0.5 text-center w-full truncate drop-shadow-[0_2px_2px_rgba(0,0,0,1)]">
-                              {first}
+                            <span className="font-sport text-sm md:text-base text-yellow-500 font-semibold tracking-[0.2em] leading-none mb-0.5 text-center w-full truncate drop-shadow-[0_2px_2px_rgba(0,0,0,1)]">
+                              {toTitleCase(first)}
                             </span>
                           )}
-                          <span className={`text-lg md:text-2xl font-black uppercase tracking-tighter text-center leading-none w-full break-words drop-shadow-[0_2px_4px_rgba(0,0,0,1)] line-clamp-1 ${isMaxLevel ? 'text-transparent bg-clip-text bg-gradient-to-b from-white to-yellow-200' : 'text-white'}`}>
-                            {last}
+                          <span className={`font-sport text-2xl md:text-3xl font-semibold tracking-wide text-center leading-none w-full break-words drop-shadow-[0_2px_4px_rgba(0,0,0,1)] line-clamp-1 ${isMaxLevel ? 'text-transparent bg-clip-text bg-gradient-to-b from-white to-yellow-200' : 'text-white'}`}>
+                            {toTitleCase(last)}
                           </span>
                         </div>
 
@@ -358,12 +359,12 @@ export default function LockerRoom() {
 
                         {/* Authentic FC Stats Grid */}
                         <div className="grid grid-cols-6 w-full px-2 gap-x-1 gap-y-0.5 text-center">
-                          <div className="flex flex-col"><span className="text-[10px] md:text-sm font-black text-white leading-none">{stats.pac}</span><span className="text-[6px] md:text-[8px] text-gray-400 font-bold uppercase">PAC</span></div>
-                          <div className="flex flex-col"><span className="text-[10px] md:text-sm font-black text-white leading-none">{stats.sho}</span><span className="text-[6px] md:text-[8px] text-gray-400 font-bold uppercase">SHO</span></div>
-                          <div className="flex flex-col"><span className="text-[10px] md:text-sm font-black text-white leading-none">{stats.pas}</span><span className="text-[6px] md:text-[8px] text-gray-400 font-bold uppercase">PAS</span></div>
-                          <div className="flex flex-col"><span className="text-[10px] md:text-sm font-black text-white leading-none">{stats.dri}</span><span className="text-[6px] md:text-[8px] text-gray-400 font-bold uppercase">DRI</span></div>
-                          <div className="flex flex-col"><span className="text-[10px] md:text-sm font-black text-white leading-none">{stats.def}</span><span className="text-[6px] md:text-[8px] text-gray-400 font-bold uppercase">DEF</span></div>
-                          <div className="flex flex-col"><span className="text-[10px] md:text-sm font-black text-white leading-none">{stats.phy}</span><span className="text-[6px] md:text-[8px] text-gray-400 font-bold uppercase">PHY</span></div>
+                          <div className="flex flex-col"><span className="text-xs md:text-sm font-black text-white leading-none">{stats.pac}</span><span className="text-[8px] md:text-[10px] text-gray-400 font-bold uppercase">PAC</span></div>
+                          <div className="flex flex-col"><span className="text-xs md:text-sm font-black text-white leading-none">{stats.sho}</span><span className="text-[8px] md:text-[10px] text-gray-400 font-bold uppercase">SHO</span></div>
+                          <div className="flex flex-col"><span className="text-xs md:text-sm font-black text-white leading-none">{stats.pas}</span><span className="text-[8px] md:text-[10px] text-gray-400 font-bold uppercase">PAS</span></div>
+                          <div className="flex flex-col"><span className="text-xs md:text-sm font-black text-white leading-none">{stats.dri}</span><span className="text-[8px] md:text-[10px] text-gray-400 font-bold uppercase">DRI</span></div>
+                          <div className="flex flex-col"><span className="text-xs md:text-sm font-black text-white leading-none">{stats.def}</span><span className="text-[8px] md:text-[10px] text-gray-400 font-bold uppercase">DEF</span></div>
+                          <div className="flex flex-col"><span className="text-xs md:text-sm font-black text-white leading-none">{stats.phy}</span><span className="text-[8px] md:text-[10px] text-gray-400 font-bold uppercase">PHY</span></div>
                         </div>
 
                         <div className="mt-2 text-yellow-500 opacity-60">

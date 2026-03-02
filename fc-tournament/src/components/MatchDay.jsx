@@ -4,6 +4,7 @@ import { db } from '../firebase';
 import { collection, getDocs, addDoc, deleteDoc, doc, updateDoc, query, orderBy, limit } from 'firebase/firestore';
 import { Plus, Users, User, X, Trash2, Goal, Star, Trophy, Sword, AlertCircle, History, UserPlus } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { toTitleCase } from '../lib/utils';
 
 export default function MatchDay({ belloMode, onGoalScored }) {
   const [players, setPlayers] = useState([]);
@@ -173,7 +174,7 @@ export default function MatchDay({ belloMode, onGoalScored }) {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6 mb-10 border-b border-yellow-500/20 pb-6">
         <div>
            <h2 className="text-4xl md:text-5xl font-black italic uppercase tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-yellow-500 via-yellow-200 to-yellow-600 drop-shadow-[0_0_15px_rgba(234,179,8,0.3)]">Match Day</h2>
-           <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-2">Manage Tournaments & Record Scores</p>
+           <p className="text-xs text-gray-400 font-bold uppercase tracking-widest mt-2">Manage Tournaments & Record Scores</p>
         </div>
         <button 
           onClick={() => { setWizardStep(1); setShowCreateModal(true); }} 
@@ -220,14 +221,14 @@ export default function MatchDay({ belloMode, onGoalScored }) {
                           </div>
                         ))}
                       </div>
-                      <span className="text-xs sm:text-sm font-black text-white uppercase tracking-tight truncate">{team.name}</span>
+                      <span className="font-sport text-base sm:text-lg font-semibold text-white tracking-wide truncate drop-shadow-[0_0_8px_rgba(234,179,8,0.3)]">{toTitleCase(team.name || '')}</span>
                     </div>
                     <div className="text-xl sm:text-2xl font-black text-yellow-500 italic drop-shadow-md shrink-0">{team.pts} <span className="text-[8px] sm:text-[9px] not-italic text-gray-500 ml-0.5">PTS</span></div>
                   </div>
                   <div className="flex flex-wrap gap-4 border-t border-white/5 pt-3">
                     {team.playerData?.map((p, idx) => (
                       <div key={idx} className="flex items-center gap-2">
-                        <span className="text-[9px] font-black text-yellow-500 uppercase">{p.name.split(' ')[0]}</span>
+                        <span className="font-sport text-xs sm:text-sm font-semibold text-yellow-500">{toTitleCase(p?.name || '').split(' ')[0]}</span>
                         <span className="text-[9px] font-bold text-gray-400 flex items-center gap-1"><Goal className="w-3 h-3 text-white/40"/> {p.tournamentGoals || 0}</span>
                         <span className="text-[9px] font-bold text-gray-400 flex items-center gap-1"><Star className="w-3 h-3 text-white/40"/> {p.tournamentAssists || 0}</span>
                       </div>
@@ -258,8 +259,8 @@ export default function MatchDay({ belloMode, onGoalScored }) {
                 className="absolute -right-2 -bottom-2 w-16 h-16 sm:w-20 sm:h-20 object-contain opacity-[0.02] group-hover:opacity-[0.08] transition-opacity pointer-events-none" 
               />
               <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto relative z-10">
-                <span className="text-xs sm:text-sm font-black text-white uppercase tracking-tight text-center sm:text-left leading-tight group-hover:text-yellow-400 transition-colors">
-                  {m.homeTeam}
+                <span className="font-sport text-base sm:text-lg font-semibold text-white tracking-wide text-center sm:text-left leading-tight group-hover:text-yellow-400 transition-colors drop-shadow-md">
+                  {toTitleCase(m.homeTeam || '')}
                 </span>
                 <div className="flex items-center gap-2">
                   <div className="w-8 sm:w-4 h-[1px] bg-white/10 sm:hidden" />
@@ -268,8 +269,8 @@ export default function MatchDay({ belloMode, onGoalScored }) {
                   </span>
                   <div className="w-8 sm:w-4 h-[1px] bg-white/10 sm:hidden" />
                 </div>
-                <span className="text-xs sm:text-sm font-black text-white uppercase tracking-tight text-center sm:text-left leading-tight group-hover:text-yellow-400 transition-colors">
-                  {m.awayTeam}
+                <span className="font-sport text-base sm:text-lg font-semibold text-white tracking-wide text-center sm:text-left leading-tight group-hover:text-yellow-400 transition-colors drop-shadow-md">
+                  {toTitleCase(m.awayTeam || '')}
                 </span>
               </div>
               <div className="flex flex-col items-center relative z-10 w-full sm:w-auto">
@@ -284,7 +285,7 @@ export default function MatchDay({ belloMode, onGoalScored }) {
               </div>
             </div>
           )) : (
-            <p className="text-gray-500 text-[10px] font-black uppercase tracking-widest italic">No matches recorded yet...</p>
+            <p className="text-gray-500 text-xs font-black uppercase tracking-widest italic">No matches recorded yet...</p>
           )}
         </div>
       </div>
@@ -345,7 +346,7 @@ export default function MatchDay({ belloMode, onGoalScored }) {
                               <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full overflow-hidden bg-[#121212] border border-white/10 shrink-0">
                                 <video src={p.videoUrl} autoPlay loop muted playsInline className="w-full h-full object-cover scale-110" />
                               </div>
-                              <span className="text-[11px] sm:text-xs font-black uppercase tracking-tight text-left leading-none">{p.name}</span>
+                              <span className="font-sport text-base sm:text-lg font-semibold tracking-wide text-left leading-none">{toTitleCase(p?.name || '')}</span>
                             </button>
                           );
                         })}
@@ -389,7 +390,7 @@ export default function MatchDay({ belloMode, onGoalScored }) {
                             <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full overflow-hidden bg-[#121212] border border-white/10 shrink-0">
                               <video src={p.videoUrl} autoPlay loop muted playsInline className="w-full h-full object-cover scale-110" />
                             </div>
-                            <span className="text-[11px] sm:text-xs font-black uppercase tracking-tight text-left leading-none">{p.name}</span>
+                            <span className="font-sport text-base sm:text-lg font-semibold tracking-wide text-left leading-none">{toTitleCase(p?.name || '')}</span>
                           </button>
                         );
                       })}
@@ -451,10 +452,10 @@ export default function MatchDay({ belloMode, onGoalScored }) {
                           {[matchData.homeTeam, matchData.awayTeam].map((team, tIdx) => (
                             team && (
                               <div key={tIdx} className="space-y-3 sm:space-y-4 bg-black/40 p-4 sm:p-5 rounded-2xl border border-white/5">
-                                <p className="text-[11px] sm:text-xs font-black uppercase text-white border-b border-white/10 pb-2 mb-3 sm:mb-4">{team.name}</p>
+                                <p className="font-sport text-base sm:text-lg font-semibold text-white border-b border-white/10 pb-2 mb-3 sm:mb-4 tracking-wide">{toTitleCase(team.name || '')}</p>
                                 {team.playerData?.map(p => (
                                   <div key={p.id} className="flex items-center justify-between gap-3">
-                                    <span className="text-[10px] font-bold text-gray-300 uppercase truncate flex-1">{p.name.split(' ')[0]}</span>
+                                    <span className="font-sport text-sm font-semibold text-gray-300 truncate flex-1">{toTitleCase(p?.name || '').split(' ')[0]}</span>
                                     <input 
                                       type="number" placeholder="0" 
                                       value={matchData.playerGoals[p.id] || ''} 

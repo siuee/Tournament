@@ -6,6 +6,12 @@ export default {
   ],
   theme: {
     extend: {
+      fontFamily: {
+        display: ['Bebas Neue', 'sans-serif'],
+        headline: ['Anton', 'sans-serif'],
+        sport: ['Oswald', 'sans-serif'],
+        sans: ['Outfit', 'system-ui', 'sans-serif'],
+      },
       colors: {
         dark: '#0f172a',
         darker: '#020617',
