@@ -1,10 +1,12 @@
-import { useState, useMemo } from 'react';
-import { Trophy, Shield, Gamepad2, Sun, Moon, Activity, Droplets } from 'lucide-react';
+import { useState, useMemo, useEffect } from 'react';
+import { Trophy, Shield, Gamepad2, Sun, Moon, Activity, Droplets, Flame, Sparkles, Leaf } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 import LockerRoom from './components/LockerRoom';
 import Standings from './components/Standings'; 
-import MatchDay from './components/MatchDay'; 
+import MatchDay from './components/MatchDay';
+import { AnimatedSocialIcons } from './components/ui/floating-action-button';
+import { StarShockwaves } from './components/ui/star-shockwaves'; 
 
 // --- BRANDING SVG ---
 const BananaIcon = ({ className }) => (
@@ -137,18 +139,23 @@ function App() {
 
   return (
     <div className="min-h-screen relative font-sans overflow-x-hidden">
-      
+      {/* Dynamic Background - solid base, behind particles */}
+      <motion.div 
+        animate={{ backgroundColor: belloMode ? '#fffbeb' : '#050505' }}
+        className="fixed inset-0 z-[-20]"
+        style={{ transition: 'background-color 0.6s ease' }}
+      />
+      {/* StarShockwaves - persistent particle animation, smooth navigation */}
+      <div className="fixed inset-0 z-[-10]">
+        <StarShockwaves />
+      </div>
+
       {/* --- THE FALLING STAGE --- */}
       <motion.div 
         animate={screenFallen ? { y: '120vh', rotate: -12, scale: 0.85, opacity: 0 } : { y: 0, rotate: 0, scale: 1, opacity: 1 }}
         transition={{ type: "spring", mass: 2.5, damping: 12, stiffness: 45 }}
         className="min-h-screen relative z-10"
       >
-        {/* Dynamic Background */}
-        <motion.div 
-          animate={{ backgroundColor: belloMode ? '#fffbeb' : '#050505' }}
-          className="fixed inset-0 z-0"
-        />
 
         {/* --- DESKTOP PRO NAVIGATION --- */}
         <nav className="hidden md:flex fixed top-6 left-1/2 -translate-x-1/2 z-[100] w-full max-w-5xl px-4">
@@ -186,10 +193,10 @@ function App() {
           <AnimatePresence mode="wait">
             <motion.div
               key={activeTab}
-              initial={{ opacity: 0, y: 20, filter: 'blur(10px)' }}
-              animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
-              exit={{ opacity: 0, y: -20, filter: 'blur(10px)' }}
-              transition={{ type: "spring", stiffness: 300, damping: 25 }}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.2, ease: "easeOut" }}
               className="max-w-7xl mx-auto"
             >
               {activeTab === 'standings' && <Standings belloMode={belloMode} />}
@@ -199,7 +206,7 @@ function App() {
           </AnimatePresence>
         </main>
 
-        {/* Global StarShockwaves controls (theme, pulse, animate) */}
+        {/* Global StarShockwaves controls (theme + animate on/off) */}
         <ShockwaveControls />
 
         {/* --- MOBILE CONSOLE TAB BAR --- */}
@@ -208,9 +215,9 @@ function App() {
             initial={{ y: 100 }} animate={{ y: 0 }}
             className={`flex justify-around items-center p-3 rounded-[35px] border backdrop-blur-2xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] transition-all duration-500 ${belloMode ? 'bg-white/95 border-yellow-200' : 'bg-[#0a0a0c]/90 border-white/10'}`}
           >
-            <MobTab icon={<Activity />} label="RANK" minion="standings" active={activeTab === 'standings'} onClick={() => setActiveTab('standings')} bello={belloMode} />
-            <MobTab icon={<Gamepad2 />} label="PLAY" minion="match" active={activeTab === 'match'} onClick={() => setActiveTab('match')} bello={belloMode} />
-            <MobTab icon={<Shield />} label="CLUB" minion="locker" active={activeTab === 'locker'} onClick={() => setActiveTab('locker')} bello={belloMode} />
+            <MobTab icon={<Activity />} label="RANK" active={activeTab === 'standings'} onClick={() => setActiveTab('standings')} bello={belloMode} />
+            <MobTab icon={<Gamepad2 />} label="PLAY" active={activeTab === 'match'} onClick={() => setActiveTab('match')} bello={belloMode} />
+            <MobTab icon={<Shield />} label="CLUB" active={activeTab === 'locker'} onClick={() => setActiveTab('locker')} bello={belloMode} />
           </motion.div>
         </nav>
 
@@ -295,16 +302,8 @@ const NavBtn = ({ icon, label, active, onClick, bello }) => (
 );
 
 // STYLIZED MOBILE TAB
-const MobTab = ({ icon, label, active, onClick, minion, bello }) => (
+const MobTab = ({ icon, label, active, onClick, bello }) => (
   <button onClick={onClick} className="flex flex-col items-center justify-center relative px-6 py-2">
-    <AnimatePresence>
-      {active && (
-        <motion.img 
-          initial={{ y: 30, opacity: 0, scale: 0.5 }} animate={{ y: 0, opacity: 1, scale: 1 }} exit={{ y: 30, opacity: 0, scale: 0.5 }}
-          src={`/assets/minions/${minion}_tab.png`} className="absolute -top-16 w-16 h-16 object-contain z-20 drop-shadow-2xl pointer-events-none"
-        />
-      )}
-    </AnimatePresence>
     <div className={`p-3.5 rounded-2xl transition-all duration-500 ${active ? 'bg-yellow-500 text-black shadow-xl rotate-[10deg] scale-110' : bello ? 'bg-yellow-50 text-yellow-600' : 'bg-white/5 text-gray-600'}`}>
       {icon}
     </div>
@@ -314,71 +313,82 @@ const MobTab = ({ icon, label, active, onClick, minion, bello }) => (
   </button>
 );
 
-// Global controls for StarShockwaves background (communicates via window events)
+const STORAGE_KEY = 'starshockwaves-settings';
+
+// Global controls for StarShockwaves (theme + animate) via AnimatedSocialIcons FAB
 const ShockwaveControls = () => {
-  const [theme, setTheme] = useState('molten');
-  const [animate, setAnimate] = useState(true);
+  const [theme, setTheme] = useState(() => {
+    if (typeof window === 'undefined') return 'molten';
+    try {
+      const s = localStorage.getItem(STORAGE_KEY);
+      if (s) {
+        const parsed = JSON.parse(s);
+        if (parsed?.theme) return parsed.theme;
+      }
+    } catch {}
+    return 'molten';
+  });
+  const [animate, setAnimate] = useState(() => {
+    if (typeof window === 'undefined') return true;
+    try {
+      const s = localStorage.getItem(STORAGE_KEY);
+      if (s) {
+        const parsed = JSON.parse(s);
+        if (typeof parsed?.animate === 'boolean') return parsed.animate;
+      }
+    } catch {}
+    return true;
+  });
+
+  const persist = (nextTheme, nextAnimate) => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ theme: nextTheme ?? theme, animate: nextAnimate ?? animate }));
+    } catch {}
+  };
 
   const sendTheme = (t) => {
     setTheme(t);
+    persist(t, undefined);
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('starshockwaves-theme', { detail: t }));
-    }
-  };
-
-  const pulse = () => {
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new Event('starshockwaves-pulse'));
     }
   };
 
   const toggleAnimate = () => {
     const next = !animate;
     setAnimate(next);
+    persist(undefined, next);
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('starshockwaves-animate', { detail: next }));
     }
   };
 
-  return (
-    <div className="fixed bottom-4 left-4 z-[200] flex flex-col gap-3">
-      <div className="rounded-2xl bg-black/70 border border-white/10 backdrop-blur-xl px-3 py-2 flex flex-wrap items-center gap-2">
-        <span className="text-[9px] font-black uppercase tracking-[0.2em] text-gray-400 mr-1">
-          Theme
-        </span>
-        {['molten', 'cosmic', 'emerald'].map((t) => (
-          <button
-            key={t}
-            onClick={() => sendTheme(t)}
-            className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border ${
-              theme === t
-                ? 'bg-yellow-400 text-black border-yellow-300 shadow-[0_0_12px_rgba(250,204,21,0.5)]'
-                : 'bg-white/5 text-gray-300 border-white/10 hover:border-yellow-400 hover:text-yellow-300'
-            }`}
-          >
-            {t}
-          </button>
-        ))}
-      </div>
+  // Respond when a new StarShockwaves mounts (e.g. after page change) so it gets current theme/animate
+  useEffect(() => {
+    const handler = () => {
+      window.dispatchEvent(new CustomEvent('starshockwaves-theme', { detail: theme }));
+      window.dispatchEvent(new CustomEvent('starshockwaves-animate', { detail: animate }));
+    };
+    window.addEventListener('starshockwaves-request-state', handler);
+    return () => window.removeEventListener('starshockwaves-request-state', handler);
+  }, [theme, animate]);
 
-      <div className="rounded-2xl bg-black/70 border border-white/10 backdrop-blur-xl px-3 py-2 flex items-center gap-3">
-        <button
-          onClick={pulse}
-          className="px-4 py-1.5 rounded-xl bg-yellow-500 text-black text-[10px] font-black uppercase tracking-[0.18em] shadow-[0_0_12px_rgba(234,179,8,0.6)] hover:scale-105 active:scale-95 transition-transform"
-        >
-          Pulse
-        </button>
-        <button
-          onClick={toggleAnimate}
-          className={`px-4 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-[0.18em] border transition-all ${
-            animate
-              ? 'bg-emerald-500/20 text-emerald-300 border-emerald-400'
-              : 'bg-white/5 text-gray-300 border-white/10'
-          }`}
-        >
-          {animate ? 'Animate On' : 'Animate Off'}
-        </button>
-      </div>
+  const themeIcons = [
+    { Icon: Flame, onClick: () => sendTheme('molten'), active: theme === 'molten', circleBg: 'bg-orange-500' },
+    { Icon: Sparkles, onClick: () => sendTheme('cosmic'), active: theme === 'cosmic', circleBg: 'bg-purple-500' },
+    { Icon: Leaf, onClick: () => sendTheme('emerald'), active: theme === 'emerald', circleBg: 'bg-emerald-500' },
+    {
+      Icon: animate ? Sun : Moon,
+      onClick: toggleAnimate,
+      active: animate,
+      circleBg: animate ? 'bg-amber-200' : 'bg-slate-700',
+      iconClassName: animate ? 'text-slate-800' : 'text-white/90',
+    },
+  ];
+
+  return (
+    <div className="fixed bottom-4 left-4 z-[200]">
+      <AnimatedSocialIcons icons={themeIcons} iconSize={20} className="w-auto" />
     </div>
   );
 };

@@ -4,7 +4,6 @@ import { db, storage } from '../firebase';
 import { collection, getDocs, doc, setDoc, deleteDoc, writeBatch } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { motion, AnimatePresence } from 'framer-motion';
-import { StarShockwaves } from './ui/star-shockwaves';
 
 export default function LockerRoom() {
   const [players, setPlayers] = useState([]);
@@ -248,10 +247,6 @@ export default function LockerRoom() {
 
   return (
     <div className="min-h-screen relative text-white pb-32 overflow-hidden">
-      <div className="fixed inset-0 -z-10">
-        <StarShockwaves />
-      </div>
-
       {/* Header */}
       <div className="px-4 md:px-8 pt-6 pb-4 border-b border-yellow-500/20 mb-8 bg-black/60 backdrop-blur-xl sticky top-0 z-30 flex justify-between items-center shadow-[0_10px_30px_rgba(0,0,0,0.5)]">
          <div>

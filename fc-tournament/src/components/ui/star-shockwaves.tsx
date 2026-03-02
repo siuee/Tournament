@@ -39,6 +39,9 @@ function StarShockwaves() {
     window.addEventListener('starshockwaves-pulse', handlePulse);
     window.addEventListener('starshockwaves-animate', handleAnimate);
 
+    // Request current state on mount (e.g. when switching pages) so theme/animate persist
+    window.dispatchEvent(new Event('starshockwaves-request-state'));
+
     return () => {
       window.removeEventListener('starshockwaves-theme', handleTheme);
       window.removeEventListener('starshockwaves-pulse', handlePulse);
@@ -71,8 +74,8 @@ function StarShockwaves() {
 
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
-    controls.dampingFactor = 0.04;
-    controls.rotateSpeed = 0.3;
+    controls.dampingFactor = 0.06;
+    controls.rotateSpeed = 0.25;
     controls.minDistance = 30;
     controls.maxDistance = 300;
     controls.enablePan = false;
@@ -312,7 +315,7 @@ function StarShockwaves() {
 
     function animate() {
       raf = requestAnimationFrame(animate);
-      time += 0.02;
+      time += 0.016;
       controls.update();
 
       if (isAnimating) {
@@ -386,7 +389,7 @@ function StarShockwaves() {
           let curTargetY = homeY + addY;
           let curTargetZ = homeZ + addZ;
 
-          let lerp = 0.085;
+          let lerp = 0.07;
           if (disAmt > 0.001) {
             curTargetX += disintegrationOffsets[i3] * disAmt;
             curTargetY += disintegrationOffsets[i3 + 1] * disAmt;
