@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { Camera, Plus, X, Video, Trash2, Edit2, ShieldCheck, UserPlus, Sparkles, Hash, Zap, TrendingUp, CalendarDays } from 'lucide-react';
+import { toTitleCase } from '../lib/utils';
 import { db, storage } from '../firebase';
 import { collection, getDocs, doc, setDoc, deleteDoc, writeBatch } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -12,6 +13,8 @@ export default function LockerRoom() {
   const [editingPlayer, setEditingPlayer] = useState(null);
   const [loading, setLoading] = useState(true);
   
+  const clickOriginRef = useRef({ x: 0, y: 0 });
+
   // Form State
   const [formData, setFormData] = useState({ name: '', nickname: '' });
   const [tempVideoUrl, setTempVideoUrl] = useState(null);
@@ -24,6 +27,19 @@ export default function LockerRoom() {
   const videoRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const chunksRef = useRef([]);
+
+  const openWithClick = (handler, e) => {
+    if (e?.clientX != null && e?.clientY != null) {
+      clickOriginRef.current = { x: e.clientX, y: e.clientY };
+    }
+    handler?.();
+  };
+
+  const getClickOriginVariant = () => {
+    const o = clickOriginRef.current;
+    if (typeof window === 'undefined') return { scale: 0, opacity: 0, x: 0, y: 0 };
+    return { scale: 0, opacity: 0, x: o.x - window.innerWidth / 2, y: o.y - window.innerHeight / 2 };
+  };
 
   useEffect(() => {
     fetchPlayersAndSyncSeason();
@@ -135,7 +151,10 @@ export default function LockerRoom() {
   };
 
   // --- STUDIO LOGIC ---
-  const enterStudio = async () => {
+  const enterStudio = async (e) => {
+    if (e?.clientX != null && e?.clientY != null) {
+      clickOriginRef.current = { x: e.clientX, y: e.clientY };
+    }
     setIsStudioOpen(true);
     try {
       const mediaStream = await navigator.mediaDevices.getUserMedia({ video: true });
@@ -246,9 +265,7 @@ export default function LockerRoom() {
   }
 
   return (
-    <div className="min-h-screen relative text-white pb-32 bg-gradient-to-b from-[#020617] via-[#050b14] to-black">
-      <div className="fixed inset-0 z-0 opacity-[0.03] pointer-events-none" style={{ backgroundImage: 'radial-gradient(circle at 2px 2px, #ffd700 1px, transparent 0)', backgroundSize: '30px 30px' }} />
-
+    <div className="min-h-screen relative text-white pb-32 overflow-hidden">
       {/* Header */}
       <div className="px-4 md:px-8 pt-6 pb-4 border-b border-yellow-500/20 mb-8 bg-black/60 backdrop-blur-xl sticky top-0 z-30 flex justify-between items-center shadow-[0_10px_30px_rgba(0,0,0,0.5)]">
          <div>
@@ -262,12 +279,14 @@ export default function LockerRoom() {
               </div>
             </div>
          </div>
-         <button 
-           onClick={() => setIsFormOpen(true)}
-           className="hidden md:flex bg-gradient-to-b from-yellow-300 via-yellow-500 to-yellow-600 px-6 py-3 rounded-xl font-black uppercase text-xs tracking-widest text-black shadow-[0_0_20px_rgba(234,179,8,0.4)] hover:scale-105 active:scale-95 transition-all items-center gap-2 border border-yellow-200/50"
+         <motion.button 
+           onClick={(e) => openWithClick(() => setIsFormOpen(true), e)}
+           whileHover={{ scale: 1.05 }}
+           whileTap={{ scale: 0.95 }}
+           className="hidden md:flex bg-gradient-to-b from-yellow-300 via-yellow-500 to-yellow-600 px-6 py-3 rounded-xl font-black uppercase text-xs tracking-widest text-black shadow-[0_0_20px_rgba(234,179,8,0.4)] items-center gap-2 border border-yellow-200/50"
          >
            <UserPlus className="w-4 h-4" /> Open Pack
-         </button>
+         </motion.button>
       </div>
 
       {/* FC PLAYER CARDS GRID */}
@@ -297,8 +316,8 @@ export default function LockerRoom() {
                   
                   {/* EDIT/DELETE ACTIONS */}
                   <div className="absolute -top-3 -right-3 flex gap-2 z-50 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                    <button onClick={(e) => { e.stopPropagation(); setEditingPlayer(player); setFormData({ name: player.name, nickname: player.nickname }); setIsFormOpen(true); }} className="p-2 bg-yellow-500 text-black rounded-full shadow-lg hover:scale-110 active:scale-95"><Edit2 className="w-3.5 h-3.5" /></button>
-                    <button onClick={(e) => { e.stopPropagation(); handleDeletePlayer(player.id); }} className="p-2 bg-red-600 text-white rounded-full shadow-lg hover:scale-110 active:scale-95"><Trash2 className="w-3.5 h-3.5" /></button>
+                    <motion.button onClick={(e) => { e.stopPropagation(); setEditingPlayer(player); setFormData({ name: player.name, nickname: player.nickname }); setIsFormOpen(true); }} whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.95 }} className="p-2 bg-yellow-500 text-black rounded-full shadow-lg"><Edit2 className="w-3.5 h-3.5" /></motion.button>
+                    <motion.button onClick={(e) => { e.stopPropagation(); handleDeletePlayer(player.id); }} whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.95 }} className="p-2 bg-red-600 text-white rounded-full shadow-lg"><Trash2 className="w-3.5 h-3.5" /></motion.button>
                   </div>
 
                   {/* OUTER GOLD BORDER */}
@@ -320,14 +339,14 @@ export default function LockerRoom() {
                       {/* TOP LEFT: OVR & POSITION */}
                       <div className="absolute top-4 left-3 md:top-5 md:left-4 flex flex-col items-center z-20 drop-shadow-[0_2px_4px_rgba(0,0,0,1)]">
                         <span className={`text-2xl md:text-3xl font-black leading-none tracking-tighter ${isMaxLevel ? 'text-transparent bg-clip-text bg-gradient-to-b from-white to-yellow-200 drop-shadow-[0_0_10px_rgba(255,255,255,0.5)]' : 'text-white'}`}>{stats.ovr}</span>
-                        <span className="text-[10px] md:text-xs font-black text-yellow-500 uppercase tracking-widest leading-none mt-0.5">ST</span>
+                        <span className="text-xs md:text-sm font-black text-yellow-500 uppercase tracking-widest leading-none mt-0.5">ST</span>
                         <div className="w-6 h-[1px] bg-yellow-500/50 mt-1 mb-1" />
                         <img src="/assets/leagues/intl.jpg" className="w-4 h-3 md:w-5 md:h-4 object-cover rounded-[1px] opacity-90" alt="Nation" />
                       </div>
 
                       {/* CLUB RANK BADGE */}
                       <div className="absolute top-4 right-3 md:top-5 md:right-4 flex flex-col items-center z-20 opacity-60 group-hover:opacity-100 transition-opacity">
-                        <span className="text-[8px] font-black uppercase tracking-widest text-yellow-500 leading-none mb-0.5">Rank</span>
+                        <span className="text-[10px] font-black uppercase tracking-widest text-yellow-500 leading-none mb-0.5">Rank</span>
                         <span className="text-sm font-black text-white italic">#{idx + 1}</span>
                       </div>
 
@@ -347,12 +366,12 @@ export default function LockerRoom() {
                         
                         <div className="flex flex-col items-center w-full px-4 mb-1">
                           {first && (
-                            <span className="text-[9px] md:text-[11px] text-yellow-500 font-bold uppercase tracking-[0.3em] leading-none mb-0.5 text-center w-full truncate drop-shadow-[0_2px_2px_rgba(0,0,0,1)]">
-                              {first}
+                            <span className="font-sport text-sm md:text-base text-yellow-500 font-semibold tracking-[0.2em] leading-none mb-0.5 text-center w-full truncate drop-shadow-[0_2px_2px_rgba(0,0,0,1)]">
+                              {toTitleCase(first)}
                             </span>
                           )}
-                          <span className={`text-lg md:text-2xl font-black uppercase tracking-tighter text-center leading-none w-full break-words drop-shadow-[0_2px_4px_rgba(0,0,0,1)] line-clamp-1 ${isMaxLevel ? 'text-transparent bg-clip-text bg-gradient-to-b from-white to-yellow-200' : 'text-white'}`}>
-                            {last}
+                          <span className={`font-sport text-2xl md:text-3xl font-semibold tracking-wide text-center leading-none w-full break-words drop-shadow-[0_2px_4px_rgba(0,0,0,1)] line-clamp-1 ${isMaxLevel ? 'text-transparent bg-clip-text bg-gradient-to-b from-white to-yellow-200' : 'text-white'}`}>
+                            {toTitleCase(last)}
                           </span>
                         </div>
 
@@ -360,12 +379,12 @@ export default function LockerRoom() {
 
                         {/* Authentic FC Stats Grid */}
                         <div className="grid grid-cols-6 w-full px-2 gap-x-1 gap-y-0.5 text-center">
-                          <div className="flex flex-col"><span className="text-[10px] md:text-sm font-black text-white leading-none">{stats.pac}</span><span className="text-[6px] md:text-[8px] text-gray-400 font-bold uppercase">PAC</span></div>
-                          <div className="flex flex-col"><span className="text-[10px] md:text-sm font-black text-white leading-none">{stats.sho}</span><span className="text-[6px] md:text-[8px] text-gray-400 font-bold uppercase">SHO</span></div>
-                          <div className="flex flex-col"><span className="text-[10px] md:text-sm font-black text-white leading-none">{stats.pas}</span><span className="text-[6px] md:text-[8px] text-gray-400 font-bold uppercase">PAS</span></div>
-                          <div className="flex flex-col"><span className="text-[10px] md:text-sm font-black text-white leading-none">{stats.dri}</span><span className="text-[6px] md:text-[8px] text-gray-400 font-bold uppercase">DRI</span></div>
-                          <div className="flex flex-col"><span className="text-[10px] md:text-sm font-black text-white leading-none">{stats.def}</span><span className="text-[6px] md:text-[8px] text-gray-400 font-bold uppercase">DEF</span></div>
-                          <div className="flex flex-col"><span className="text-[10px] md:text-sm font-black text-white leading-none">{stats.phy}</span><span className="text-[6px] md:text-[8px] text-gray-400 font-bold uppercase">PHY</span></div>
+                          <div className="flex flex-col"><span className="text-xs md:text-sm font-black text-white leading-none">{stats.pac}</span><span className="text-[8px] md:text-[10px] text-gray-400 font-bold uppercase">PAC</span></div>
+                          <div className="flex flex-col"><span className="text-xs md:text-sm font-black text-white leading-none">{stats.sho}</span><span className="text-[8px] md:text-[10px] text-gray-400 font-bold uppercase">SHO</span></div>
+                          <div className="flex flex-col"><span className="text-xs md:text-sm font-black text-white leading-none">{stats.pas}</span><span className="text-[8px] md:text-[10px] text-gray-400 font-bold uppercase">PAS</span></div>
+                          <div className="flex flex-col"><span className="text-xs md:text-sm font-black text-white leading-none">{stats.dri}</span><span className="text-[8px] md:text-[10px] text-gray-400 font-bold uppercase">DRI</span></div>
+                          <div className="flex flex-col"><span className="text-xs md:text-sm font-black text-white leading-none">{stats.def}</span><span className="text-[8px] md:text-[10px] text-gray-400 font-bold uppercase">DEF</span></div>
+                          <div className="flex flex-col"><span className="text-xs md:text-sm font-black text-white leading-none">{stats.phy}</span><span className="text-[8px] md:text-[10px] text-gray-400 font-bold uppercase">PHY</span></div>
                         </div>
 
                         <div className="mt-2 text-yellow-500 opacity-60">
@@ -384,19 +403,27 @@ export default function LockerRoom() {
 
       {/* MOBILE STICKY BOTTOM BUTTON */}
       <div className="md:hidden fixed bottom-6 left-0 right-0 px-4 z-40">
-        <button 
-          onClick={() => setIsFormOpen(true)} 
-          className="w-full bg-gradient-to-b from-yellow-300 via-yellow-500 to-yellow-600 py-4 rounded-[20px] font-black uppercase tracking-[0.2em] text-sm text-black shadow-[0_10px_25px_rgba(234,179,8,0.4)] flex items-center justify-center gap-2 active:scale-95 transition-transform border border-yellow-200"
+        <motion.button 
+          onClick={(e) => openWithClick(() => setIsFormOpen(true), e)} 
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+          className="w-full bg-gradient-to-b from-yellow-300 via-yellow-500 to-yellow-600 py-4 rounded-[20px] font-black uppercase tracking-[0.2em] text-sm text-black shadow-[0_10px_25px_rgba(234,179,8,0.4)] flex items-center justify-center gap-2 border border-yellow-200"
         >
           <UserPlus className="w-5 h-5" /> Open Pack
-        </button>
+        </motion.button>
       </div>
 
       {/* ADD / EDIT PLAYER MODAL */}
       <AnimatePresence>
         {isFormOpen && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 backdrop-blur-xl p-4">
-            <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="bg-gradient-to-b from-[#1a1813] to-black border border-yellow-600 w-full max-w-md p-8 rounded-[30px] shadow-[0_0_80px_rgba(234,179,8,0.2)] relative max-h-[90vh] overflow-y-auto no-scrollbar">
+            <motion.div
+              initial={getClickOriginVariant()}
+              animate={{ scale: 1, opacity: 1, x: 0, y: 0 }}
+              exit={getClickOriginVariant()}
+              transition={{ type: "spring", stiffness: 350, damping: 28 }}
+              className="bg-gradient-to-b from-[#1a1813] to-black border border-yellow-600 w-full max-w-md p-8 rounded-[30px] shadow-[0_0_80px_rgba(234,179,8,0.2)] relative max-h-[90vh] overflow-y-auto no-scrollbar"
+            >
               <button onClick={resetForm} className="absolute top-6 right-6 text-gray-500 hover:text-white transition-colors p-2"><X /></button>
               
               <div className="text-center mb-8">
@@ -421,13 +448,13 @@ export default function LockerRoom() {
                     <div className="w-20 h-24 rounded-lg overflow-hidden bg-[#0a0a0c] border border-yellow-600/50 shadow-[0_0_15px_rgba(234,179,8,0.2)] shrink-0">
                        {(tempVideoUrl || editingPlayer?.videoUrl) ? <video src={tempVideoUrl || editingPlayer.videoUrl} autoPlay loop muted playsInline className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center"><Video className="w-5 h-5 text-yellow-600/50" /></div>}
                     </div>
-                    <button type="button" onClick={enterStudio} className="flex-1 h-full py-5 bg-gradient-to-br from-gray-900 to-black border border-yellow-500/30 rounded-xl text-[10px] font-black active:scale-95 transition-transform uppercase tracking-widest text-yellow-500 hover:text-white hover:border-yellow-400 shadow-md">Enter Studio</button>
+                    <motion.button type="button" onClick={(ev) => enterStudio(ev)} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} className="flex-1 h-full py-5 bg-gradient-to-br from-gray-900 to-black border border-yellow-500/30 rounded-xl text-[10px] font-black uppercase tracking-widest text-yellow-500 hover:text-white hover:border-yellow-400 shadow-md">Enter Studio</motion.button>
                   </div>
                 </div>
 
-                <button type="submit" className="w-full py-5 bg-gradient-to-r from-yellow-300 via-yellow-500 to-yellow-600 text-black rounded-xl font-black uppercase tracking-[0.2em] text-sm shadow-[0_5px_20px_rgba(234,179,8,0.4)] active:scale-95 transition-transform mt-4 border border-yellow-200">
+                <motion.button type="submit" whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} className="w-full py-5 bg-gradient-to-r from-yellow-300 via-yellow-500 to-yellow-600 text-black rounded-xl font-black uppercase tracking-[0.2em] text-sm shadow-[0_5px_20px_rgba(234,179,8,0.4)] mt-4 border border-yellow-200">
                   {editingPlayer ? 'Confirm Updates' : 'Add to Club'}
-                </button>
+                </motion.button>
               </form>
             </motion.div>
           </div>
@@ -438,7 +465,13 @@ export default function LockerRoom() {
       <AnimatePresence>
         {isStudioOpen && (
           <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/95 backdrop-blur-xl p-4">
-            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="max-w-md w-full space-y-6 text-center relative">
+            <motion.div
+              initial={getClickOriginVariant()}
+              animate={{ scale: 1, opacity: 1, x: 0, y: 0 }}
+              exit={getClickOriginVariant()}
+              transition={{ type: "spring", stiffness: 350, damping: 28 }}
+              className="max-w-md w-full space-y-6 text-center relative"
+            >
               <h2 className="text-yellow-500 font-black uppercase tracking-[0.4em] text-sm flex items-center justify-center gap-2"><ShieldCheck className="w-5 h-5"/> Face Scan Booth</h2>
               
               <div className="relative aspect-[3/4] rounded-2xl overflow-hidden bg-[#0a0a0c] border-4 border-yellow-500 shadow-[0_0_50px_rgba(234,179,8,0.3)]">
@@ -466,8 +499,8 @@ export default function LockerRoom() {
               </div>
 
               <div className="flex gap-4">
-                <button onClick={closeStudio} className="flex-1 py-5 bg-black border border-white/20 rounded-xl font-black uppercase tracking-widest text-xs text-gray-400 active:bg-white/5 transition-colors">Abort</button>
-                <button onClick={startRecording} disabled={countdown !== null} className="flex-[2] py-5 bg-gradient-to-r from-yellow-500 to-yellow-600 text-black rounded-xl font-black uppercase tracking-widest text-xs disabled:opacity-50 active:scale-95 transition-transform shadow-[0_0_20px_rgba(234,179,8,0.3)]">Capture Subject</button>
+                <motion.button onClick={closeStudio} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} className="flex-1 py-5 bg-black border border-white/20 rounded-xl font-black uppercase tracking-widest text-xs text-gray-400 hover:bg-white/5">Abort</motion.button>
+                <motion.button onClick={startRecording} disabled={countdown !== null} whileHover={{ scale: countdown === null ? 1.02 : 1 }} whileTap={{ scale: 0.98 }} className="flex-[2] py-5 bg-gradient-to-r from-yellow-500 to-yellow-600 text-black rounded-xl font-black uppercase tracking-widest text-xs disabled:opacity-50 shadow-[0_0_20px_rgba(234,179,8,0.3)]">Capture Subject</motion.button>
               </div>
             </motion.div>
           </div>

@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Trophy, Crown, TrendingUp, Loader2, Goal, Medal, Flame, Users, User, Sparkles, Activity } from 'lucide-react';
 import { db } from '../firebase';
+import { toTitleCase } from '../lib/utils';
+import { PlayerCareerCard } from './ui/player-career-card';
 import { collection, getDocs, query, orderBy } from 'firebase/firestore';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -19,13 +21,13 @@ export default function Standings() {
     'eChampions League': '/assets/leagues/ucl.png'
   };
 
-  // HELPER LOGIC: Converts "First Last & First Last" to "First & First"
+  // HELPER LOGIC: Converts "First Last & First Last" to "First & First" with title case
   const formatTeamName = (fullName) => {
     if (!fullName) return "Team";
     if (fullName.includes('&')) {
-      return fullName.split('&').map(name => name.trim().split(' ')[0]).join(' & ');
+      return fullName.split('&').map(name => toTitleCase(name.trim().split(' ')[0] || '')).join(' & ');
     }
-    return fullName.trim().split(' ')[0];
+    return toTitleCase(fullName.trim().split(' ')[0] || '');
   };
 
   const getSafeTime = (dateObj) => {
@@ -134,12 +136,14 @@ export default function Standings() {
   }, []);
 
   if (loading) return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-[#050b14]">
-      <div className="relative w-16 h-16 flex items-center justify-center">
-        <Loader2 className="w-12 h-12 text-[#00ff88] animate-spin absolute" />
-        <Goal className="w-5 h-5 text-neonBlue animate-pulse" />
+    <div className="relative min-h-screen flex flex-col items-center justify-center text-white overflow-hidden">
+      <div className="relative z-10 flex flex-col items-center">
+        <div className="relative w-16 h-16 flex items-center justify-center">
+          <Loader2 className="w-12 h-12 text-[#00ff88] animate-spin absolute" />
+          <Goal className="w-5 h-5 text-neonBlue animate-pulse" />
+        </div>
+        <h2 className="text-white font-black italic tracking-tighter mt-4 animate-pulse uppercase">Syncing Pitch Data...</h2>
       </div>
-      <h2 className="text-white font-black italic tracking-tighter mt-4 animate-pulse uppercase">Syncing Pitch Data...</h2>
     </div>
   );
 
@@ -154,10 +158,9 @@ export default function Standings() {
   const itemVariants = { hidden: { opacity: 0, x: 15 }, show: { opacity: 1, x: 0, transition: { type: "spring", stiffness: 120 } } };
 
   return (
-    <div className="flex flex-col xl:flex-row gap-8 pb-20 text-white relative items-start bg-gradient-to-b from-[#020617] via-[#050b14] to-black min-h-screen hex-bg">
-      
+    <div className="relative min-h-screen flex flex-col xl:flex-row gap-6 xl:gap-8 pb-24 xl:pb-20 text-white items-stretch w-full min-w-0 overflow-x-hidden">
       {/* LEFT COLUMN: LEAGUE TABLES & CAREER STATS */}
-      <div className="flex-1 space-y-12 xl:max-w-[calc(100%-410px)] relative z-10">
+      <div className="flex-1 min-w-0 space-y-8 xl:space-y-12 xl:max-w-[calc(100%-410px)] relative z-10 w-full">
         
         {/* LEAGUE TABLES */}
         {Object.keys(leagues).map((groupKey) => {
@@ -168,10 +171,10 @@ export default function Standings() {
           const leagueFormat = leagueData[0].format;
 
           return (
-            <div key={groupKey} className="relative overflow-hidden rounded-[20px] bg-white/[0.02] border border-white/10 backdrop-blur-sm p-4 sm:p-6">
+            <div key={groupKey} className="relative overflow-hidden rounded-[20px] bg-white/[0.02] border border-white/10 backdrop-blur-sm p-3 sm:p-6">
               <img src={leagueIcons[leagueType]} className="absolute -right-10 -bottom-10 w-48 h-48 object-contain opacity-[0.02] pointer-events-none" alt="" />
               
-              <div className="flex justify-between items-center mb-6 relative z-10">
+              <div className="flex justify-between items-center mb-4 sm:mb-6 relative z-10">
                 <div className="flex items-center gap-3">
                    <h2 className="text-2xl sm:text-3xl font-black italic tracking-tighter uppercase leading-none text-transparent bg-clip-text bg-gradient-to-r from-neonBlue to-[#00ff88]">
                      <span className="text-neonBlue lowercase italic">e</span>{leagueType.replace('e', '')}
@@ -182,49 +185,46 @@ export default function Standings() {
               </div>
 
               {/* TIGHTER ELECTRIC PITCH BORDER TABLE */}
-              <div className="relative p-[1px] rounded-2xl bg-gradient-to-r from-neonBlue via-[#00ff88] to-neonBlue animate-gradient-border shadow-[0_0_20px_rgba(0,255,136,0.1)] z-10">
-                <div className="bg-[#050b14] rounded-[15px] overflow-hidden relative pitch-lines">
-                  <div className="overflow-x-auto relative z-10 custom-scrollbar pb-1">
-                    <table className="w-full text-left border-collapse whitespace-nowrap">
+              <div className="relative p-[1px] rounded-2xl bg-gradient-to-r from-neonBlue via-[#00ff88] to-neonBlue animate-gradient-border shadow-[0_0_20px_rgba(0,255,136,0.1)] z-10 w-full min-w-0">
+                <div className="bg-[#050b14] rounded-[15px] overflow-hidden relative pitch-lines w-full">
+                  <div className="overflow-x-auto overflow-y-visible relative z-10 custom-scrollbar pb-2 -mx-1 px-1 sm:mx-0 sm:px-0" style={{ WebkitOverflowScrolling: 'touch' }}>
+                    <table className="w-full min-w-[540px] text-left border-collapse whitespace-nowrap text-xs sm:text-sm">
                       <thead className="bg-[#0a1120]/80 border-b border-[#00ff88]/20 backdrop-blur-md">
-                        <tr className="text-gray-400 text-[9px] sm:text-[10px] uppercase tracking-widest">
-                          <th className="px-3 py-3 font-black text-center w-8">#</th>
-                          <th className="px-2 py-3 font-black min-w-[120px]">Team</th>
-                          <th className="px-2 py-3 text-center font-black">P</th>
-                          <th className="px-2 py-3 text-center font-black text-[#00ff88]">W</th>
-                          <th className="px-2 py-3 text-center font-black text-yellow-400">D</th>
-                          <th className="px-2 py-3 text-center font-black text-red-400">L</th>
-                          {/* CONSOLIDATED GS/GC COLUMN */}
-                          <th className="px-2 py-3 text-center font-black">GS/GC</th>
-                          <th className="px-2 py-3 text-center font-black text-blue-400">GD</th>
-                          <th className="px-3 py-3 text-center text-[#00ff88] font-black">Pts</th>
-                          <th className="px-3 py-3 text-right font-black">Form</th>
+                        <tr className="text-gray-400 text-[10px] sm:text-xs uppercase tracking-widest">
+                          <th className="px-2 sm:px-3 py-2 sm:py-3 font-black text-center w-6 sm:w-8">#</th>
+                          <th className="px-1.5 sm:px-2 py-2 sm:py-3 font-black min-w-[90px] sm:min-w-[120px]">Team</th>
+                          <th className="px-1.5 sm:px-2 py-2 sm:py-3 text-center font-black">P</th>
+                          <th className="px-1.5 sm:px-2 py-2 sm:py-3 text-center font-black text-[#00ff88]">W</th>
+                          <th className="px-1.5 sm:px-2 py-2 sm:py-3 text-center font-black text-yellow-400">D</th>
+                          <th className="px-1.5 sm:px-2 py-2 sm:py-3 text-center font-black text-red-400">L</th>
+                          <th className="px-1.5 sm:px-2 py-2 sm:py-3 text-center font-black">GS/GC</th>
+                          <th className="px-1.5 sm:px-2 py-2 sm:py-3 text-center font-black text-blue-400">GD</th>
+                          <th className="px-2 sm:px-3 py-2 sm:py-3 text-center text-[#00ff88] font-black">Pts</th>
+                          <th className="px-2 sm:px-3 py-2 sm:py-3 text-right font-black">Form</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-white/5">
                         {leagueData.map((team, i) => (
                           <tr key={i} className="hover:bg-white/5 transition-colors group">
-                            <td className="px-3 py-2.5 text-center font-black text-gray-600 text-xs">{i + 1}</td>
-                            <td className="px-2 py-2.5 font-black text-sm uppercase tracking-tighter group-hover:text-transparent group-hover:bg-clip-text group-hover:bg-gradient-to-r group-hover:from-neonBlue group-hover:to-[#00ff88] transition-all">
+                            <td className="px-2 sm:px-3 py-2 sm:py-2.5 text-center font-black text-gray-600 text-xs">{i + 1}</td>
+                            <td className="px-1.5 sm:px-2 py-2 sm:py-2.5 font-sport font-semibold text-base sm:text-lg tracking-wide group-hover:text-transparent group-hover:bg-clip-text group-hover:bg-gradient-to-r group-hover:from-neonBlue group-hover:to-[#00ff88] transition-all">
                               {formatTeamName(team.name)}
                             </td>
-                            <td className="px-2 py-2.5 text-center text-gray-400 font-bold text-xs">{team.mp}</td>
-                            <td className="px-2 py-2.5 text-center text-[#00ff88] font-bold text-xs">{team.w}</td>
-                            <td className="px-2 py-2.5 text-center text-yellow-400 font-bold text-xs">{team.d}</td>
-                            <td className="px-2 py-2.5 text-center text-red-400 font-bold text-xs">{team.l}</td>
-                            
-                            {/* COMBINED GOALS DATA */}
-                            <td className="px-2 py-2.5 text-center font-black text-xs tracking-wider">
+                            <td className="px-1.5 sm:px-2 py-2 sm:py-2.5 text-center text-gray-400 font-bold text-xs">{team.mp}</td>
+                            <td className="px-1.5 sm:px-2 py-2 sm:py-2.5 text-center text-[#00ff88] font-bold text-xs">{team.w}</td>
+                            <td className="px-1.5 sm:px-2 py-2 sm:py-2.5 text-center text-yellow-400 font-bold text-xs">{team.d}</td>
+                            <td className="px-1.5 sm:px-2 py-2 sm:py-2.5 text-center text-red-400 font-bold text-xs">{team.l}</td>
+                            <td className="px-1.5 sm:px-2 py-2 sm:py-2.5 text-center font-black text-xs tracking-wider">
                               <span className="text-cyan-400">{team.gs}</span>
                               <span className="text-gray-600 mx-0.5">/</span>
                               <span className="text-fuchsia-400">{team.gc}</span>
                             </td>
                             
-                            <td className={`px-2 py-2.5 text-center font-black text-xs ${team.gd > 0 ? 'text-[#00ff88]' : team.gd < 0 ? 'text-red-400' : 'text-gray-500'}`}>
+                            <td className={`px-1.5 sm:px-2 py-2 sm:py-2.5 text-center font-black text-xs ${team.gd > 0 ? 'text-[#00ff88]' : team.gd < 0 ? 'text-red-400' : 'text-gray-500'}`}>
                               {team.gd > 0 ? `+${team.gd}` : team.gd}
                             </td>
-                            <td className="px-3 py-2.5 text-center font-black text-xl text-[#00ff88] drop-shadow-[0_0_5px_rgba(0,255,136,0.3)] italic leading-none">{team.pts || 0}</td>
-                            <td className="px-3 py-2.5">
+                            <td className="px-2 sm:px-3 py-2 sm:py-2.5 text-center font-black text-lg sm:text-xl text-[#00ff88] drop-shadow-[0_0_5px_rgba(0,255,136,0.3)] italic leading-none">{team.pts || 0}</td>
+                            <td className="px-2 sm:px-3 py-2 sm:py-2.5">
                               <div className="flex justify-end gap-1">
                                 {team.form.map((f, idx) => (
                                   <div key={idx} className={`w-5 h-5 rounded flex items-center justify-center text-[9px] font-black border ${f === 'W' ? 'bg-[#00ff88]/20 border-[#00ff88]/50 text-[#00ff88]' : f === 'D' ? 'bg-yellow-500/20 border-yellow-500/50 text-yellow-400' : 'bg-red-500/20 border-red-500/50 text-red-400'}`}>{f}</div>
@@ -243,21 +243,27 @@ export default function Standings() {
         })}
 
         {/* FC ULTIMATE TEAM STYLE CAREER STATS */}
-        <div className="relative overflow-hidden rounded-[20px] bg-white/[0.02] border border-white/10 backdrop-blur-sm p-6">
-          <div className="flex items-center gap-3 mb-8">
-             <Activity className="w-6 h-6 text-[#00ff88]" /> 
-             <h3 className="text-2xl font-black text-white italic tracking-tighter uppercase">Squad Career Stats</h3>
+        <div className="relative overflow-visible rounded-[20px] bg-white/[0.02] border border-white/10 backdrop-blur-sm p-4 sm:p-6 w-full min-w-0">
+          <div className="flex items-center gap-3 mb-6 sm:mb-8">
+             <Activity className="w-6 h-6 text-[#00ff88] shrink-0 drop-shadow-[0_0_10px_rgba(0,255,136,0.5)]" /> 
+             <h3 className="text-2xl sm:text-3xl font-black italic tracking-tighter uppercase leading-none text-transparent bg-clip-text bg-gradient-to-r from-neonBlue to-[#00ff88] drop-shadow-[0_0_20px_rgba(0,255,136,0.3)]">Squad Career Stats</h3>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-            {players.map(player => (
-              <PlayerStatRow key={player.id} player={player} />
-            ))}
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6 sm:gap-8 w-full min-w-0">
+            {players.map((player, idx) => {
+              const themes = ['160 70% 35%', '250 50% 30%', '30 70% 45%', '200 60% 40%'];
+              const themeColor = themes[idx % themes.length];
+              return (
+                <div key={player.id} className="w-full max-w-[340px] h-[420px] mx-auto sm:mx-0">
+                  <PlayerCareerCard player={player} themeColor={themeColor} />
+                </div>
+              );
+            })}
           </div>
         </div>
       </div>
 
-      {/* RIGHT COLUMN: SMART STICKY HUD - Reverted custom-scrollbar to no-scrollbar */}
-      <div className="w-full xl:w-[380px] flex flex-col gap-8 xl:sticky xl:top-6 xl:max-h-[calc(100vh-48px)] overflow-y-auto no-scrollbar pr-1 pb-6 transform-gpu" style={{ WebkitMaskImage: 'linear-gradient(to bottom, black 95%, transparent 100%)', maskImage: 'linear-gradient(to bottom, black 95%, transparent 100%)' }}>
+      {/* RIGHT COLUMN: SMART STICKY HUD */}
+      <div className="w-full xl:w-[380px] flex flex-col gap-6 xl:gap-8 xl:sticky xl:top-6 xl:max-h-[calc(100vh-48px)] overflow-y-auto no-scrollbar pr-1 pb-6 min-w-0 shrink-0 xl:shrink-0" style={{ WebkitMaskImage: 'linear-gradient(to bottom, black 98%, transparent 100%)', maskImage: 'linear-gradient(to bottom, black 98%, transparent 100%)' }}>
         
         {/* WIDGET 1: DYNAMIC GOLDEN BOOT */}
         <div className="relative rounded-[20px] bg-[#0a1120]/80 border border-neonGold/30 backdrop-blur-md p-6 flex flex-col shrink-0 overflow-hidden shadow-[0_0_30px_rgba(0,0,0,0.5)]">
@@ -296,14 +302,14 @@ export default function Standings() {
                       <div className="absolute -bottom-2 -right-2 bg-neonGold text-black text-[10px] font-black px-1.5 py-0.5 rounded border border-[#121212]">#1</div>
                     </div>
                     <div className="flex-1">
-                      <p className="font-black uppercase tracking-tighter text-lg leading-none truncate text-white group-hover:text-neonGold transition-colors">{activeGBPlayers[0].name.split(' ')[0]}</p>
-                      <p className="text-[9px] text-yellow-500 font-bold uppercase tracking-widest mt-1">Top Scorer</p>
+                      <p className="font-sport font-semibold text-xl sm:text-2xl tracking-wide leading-none truncate text-white group-hover:text-neonGold transition-colors">{toTitleCase(activeGBPlayers[0]?.name || '').split(' ')[0]}</p>
+                      <p className="text-xs text-yellow-500 font-bold uppercase tracking-widest mt-1">Top Scorer</p>
                     </div>
                     <div className="text-right">
                       <motion.p initial={{ scale: 0.5 }} animate={{ scale: 1 }} transition={{ type: "spring", stiffness: 200, delay: 0.5 }} className="text-4xl font-black italic text-neonGold drop-shadow-[0_2px_10px_rgba(234,179,8,0.3)]">
                         {gbFormat === '1v1' ? (activeGBPlayers[0].goals1v1 || 0) : (activeGBPlayers[0].goals2v2 || 0)}
                       </motion.p>
-                      <p className="text-[9px] text-gray-500 font-bold uppercase tracking-widest">Goals</p>
+                      <p className="text-xs text-gray-500 font-bold uppercase tracking-widest">Goals</p>
                     </div>
                   </div>
                 </motion.div>
@@ -316,7 +322,7 @@ export default function Standings() {
                     <div className={`w-10 h-10 rounded-full border-2 mb-2 overflow-hidden bg-black ${idx === 1 ? 'border-gray-400 shadow-[0_0_10px_rgba(156,163,175,0.2)]' : 'border-orange-600 shadow-[0_0_10px_rgba(234,88,12,0.2)]'}`}>
                       {activeGBPlayers[idx].videoUrl ? <video src={activeGBPlayers[idx].videoUrl} autoPlay loop muted playsInline className="w-full h-full object-cover" /> : <div className="w-full h-full bg-gray-900" />}
                     </div>
-                    <p className="font-black uppercase text-[10px] text-gray-300 truncate w-full mb-1">{activeGBPlayers[idx].name.split(' ')[0]}</p>
+                    <p className="font-sport font-semibold text-sm text-gray-300 truncate w-full mb-1">{toTitleCase(activeGBPlayers[idx]?.name || '').split(' ')[0]}</p>
                     <div className="flex items-center gap-1.5 bg-black/40 px-3 py-1 rounded-full border border-white/5">
                       <Goal className={`w-3 h-3 ${idx === 1 ? 'text-gray-400' : 'text-orange-500'}`} />
                       <span className="font-black italic text-sm text-white">{gbFormat === '1v1' ? (activeGBPlayers[idx].goals1v1 || 0) : (activeGBPlayers[idx].goals2v2 || 0)}</span>
@@ -335,7 +341,7 @@ export default function Standings() {
                         <div className="w-7 h-7 rounded-full overflow-hidden bg-black border border-white/10">
                           {player.videoUrl ? <video src={player.videoUrl} autoPlay loop muted playsInline className="w-full h-full object-cover" /> : <div className="w-full h-full bg-gray-900" />}
                         </div>
-                        <p className="font-black uppercase text-[10px] text-gray-400 truncate max-w-[100px]">{player.name.split(' ')[0]}</p>
+                        <p className="font-sport font-semibold text-base text-gray-400 truncate max-w-[100px]">{toTitleCase(player?.name || '').split(' ')[0]}</p>
                       </div>
                       <div className="flex items-center gap-1.5 px-2">
                         <span className="font-black italic text-sm text-gray-300">{gbFormat === '1v1' ? (player.goals1v1 || 0) : (player.goals2v2 || 0)}</span>
@@ -357,7 +363,7 @@ export default function Standings() {
               <div className="flex items-center gap-2 text-neonGold font-black italic uppercase">
                 <Crown className="w-6 h-6" /> <h2>Ballon d'Or</h2>
               </div>
-              <p className="text-[9px] text-gray-500 uppercase tracking-widest mt-1 leading-none">Live Win Probability</p>
+              <p className="text-xs text-gray-500 uppercase tracking-widest mt-1 leading-none">Live Win Probability</p>
             </div>
             <Sparkles className="w-5 h-5 text-neonGold animate-pulse opacity-50" />
           </div>
@@ -385,7 +391,7 @@ export default function Standings() {
                       </div>
                       
                       <div>
-                        <p className="text-xs font-black uppercase tracking-tighter leading-none mb-1 text-white truncate max-w-[120px]">{player.name.split(' ')[0]}</p>
+                        <p className="font-sport text-base font-semibold tracking-wide leading-none mb-1 text-white truncate max-w-[120px]">{toTitleCase(player?.name || '').split(' ')[0]}</p>
                         <div className="flex gap-2 items-center leading-none">
                            <span className={`text-[7px] font-black tracking-widest uppercase border px-1 rounded-sm ${rankStyle.text} border-current opacity-70`}>{rankStyle.badge}</span>
                            <span className="text-[9px] text-gray-500 font-bold uppercase flex gap-1 items-baseline"><span className="text-gray-300 leading-none">{player.tGoals || 0}</span>G</span>
@@ -421,9 +427,14 @@ export default function Standings() {
       </div>
 
       <style jsx global>{`
-        /* CUSTOM SCROLLBAR - ONLY FOR TABLES NOW */
+        /* CUSTOM SCROLLBAR - TABLES: touch-friendly on mobile */
         .custom-scrollbar::-webkit-scrollbar {
-          height: 6px; /* Horizontal scrollbar height */
+          height: 8px;
+        }
+        @media (max-width: 640px) {
+          .custom-scrollbar::-webkit-scrollbar {
+            height: 10px;
+          }
         }
         .custom-scrollbar::-webkit-scrollbar-track {
           background: rgba(0, 255, 136, 0.02);
@@ -475,56 +486,3 @@ export default function Standings() {
 }
 
 // FC ULTIMATE TEAM STYLE PLAYER CARD
-function PlayerStatRow({ player }) {
-  const totalRating = (player.tGoals || 0) + (player.tAssists || 0);
-  
-  // Dynamic border glow based on how high their rating is
-  const isTopTier = totalRating >= 15;
-  const cardBorder = isTopTier ? "border-neonGold shadow-[0_0_15px_rgba(212,175,55,0.15)]" : "border-white/10 hover:border-[#00ff88]/50";
-  const glow = isTopTier ? "from-yellow-500/10" : "from-[#00ff88]/5";
-
-  return (
-    <div className={`relative p-[1px] rounded-[18px] bg-gradient-to-b ${glow} to-transparent overflow-hidden group transition-all`}>
-      <div className={`flex flex-col h-full bg-[#0a1120]/90 rounded-[17px] border ${cardBorder} transition-colors backdrop-blur-sm`}>
-        
-        {/* Top Profile Section */}
-        <div className="flex items-center gap-4 p-4 border-b border-white/5 relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-white/5 to-transparent rounded-full -translate-y-1/2 translate-x-1/2 pointer-events-none" />
-          
-          <div className="relative">
-            <div className="w-14 h-14 rounded-full border-2 border-white/20 overflow-hidden bg-black shadow-lg">
-               {player.videoUrl ? <video src={player.videoUrl} autoPlay loop muted playsInline className="w-full h-full object-cover scale-110" /> : <div className="w-full h-full bg-gray-800" />}
-            </div>
-            {/* OVR Rating Badge */}
-            <div className={`absolute -bottom-2 -right-2 w-7 h-7 flex items-center justify-center rounded-lg border-2 border-[#0a1120] font-black text-[10px] ${isTopTier ? 'bg-neonGold text-black' : 'bg-[#00ff88] text-black'}`}>
-               {totalRating}
-            </div>
-          </div>
-          
-          <div className="flex-1">
-            {/* Using first name logic here too for consistency! */}
-            <p className="font-black text-sm uppercase tracking-tighter leading-none text-white group-hover:text-[#00ff88] transition-colors">{player.name.split(' ')[0]}</p>
-            <p className="text-[9px] text-gray-500 font-bold uppercase mt-1 tracking-widest">Career G/A</p>
-          </div>
-        </div>
-
-        {/* Bottom Attributes Section (EA FC Style Grid) */}
-        <div className="grid grid-cols-3 divide-x divide-white/5 p-3 bg-black/40">
-          <div className="flex flex-col items-center justify-center">
-             <p className="text-sm font-black text-white leading-none">{player.goals1v1 || 0}</p>
-             <p className="text-[8px] text-gray-500 uppercase font-bold mt-1 tracking-widest">1v1 Gls</p>
-          </div>
-          <div className="flex flex-col items-center justify-center">
-             <p className="text-sm font-black text-white leading-none">{player.goals2v2 || 0}</p>
-             <p className="text-[8px] text-gray-500 uppercase font-bold mt-1 tracking-widest">2v2 Gls</p>
-          </div>
-          <div className="flex flex-col items-center justify-center">
-             <p className="text-sm font-black text-white leading-none">{player.assists2v2 || 0}</p>
-             <p className="text-[8px] text-gray-500 uppercase font-bold mt-1 tracking-widest">2v2 Ast</p>
-          </div>
-        </div>
-
-      </div>
-    </div>
-  );
-}

@@ -3,7 +3,9 @@ import { createPortal } from 'react-dom'; // <--- The magic fix!
 import { db } from '../firebase';
 import { collection, getDocs, addDoc, deleteDoc, doc, updateDoc, query, orderBy, limit } from 'firebase/firestore';
 import { Plus, Users, User, X, Trash2, Goal, Star, Trophy, Sword, AlertCircle, History, UserPlus } from 'lucide-react';
+import { AnimatedDropdown } from './ui/dropdown-01';
 import { motion, AnimatePresence } from 'framer-motion';
+import { toTitleCase } from '../lib/utils';
 
 export default function MatchDay({ belloMode, onGoalScored }) {
   const [players, setPlayers] = useState([]);
@@ -26,8 +28,22 @@ export default function MatchDay({ belloMode, onGoalScored }) {
 
   const [newTournament, setNewTournament] = useState({ type: '', format: '2v2', teams: [] });
   const [selectedForTeam, setSelectedForTeam] = useState([]);
+  const clickOriginRef = useRef({ x: 0, y: 0 });
 
   const strikeSound = useRef(new Audio('https://assets.mixkit.co/active_storage/sfx/2019/2019-preview.mp3'));
+
+  const openWithClick = (handler, e) => {
+    if (e?.clientX != null && e?.clientY != null) {
+      clickOriginRef.current = { x: e.clientX, y: e.clientY };
+    }
+    handler?.();
+  };
+
+  const getClickOriginVariant = () => {
+    const o = clickOriginRef.current;
+    if (typeof window === 'undefined') return { scale: 0, opacity: 0, x: 0, y: 0 };
+    return { scale: 0, opacity: 0, x: o.x - window.innerWidth / 2, y: o.y - window.innerHeight / 2 };
+  };
 
   const leagues = [
     { name: 'ePremier League', logo: '/assets/leagues/pl.png' },
@@ -165,23 +181,24 @@ export default function MatchDay({ belloMode, onGoalScored }) {
   };
 
   return (
-    <motion.div animate={screenShake ? { x: [-10, 10, -10, 10, 0] } : {}} className="space-y-12 p-4 md:p-8 min-h-screen relative text-white">
-      {/* Background Mesh */}
-      <div className="fixed inset-0 z-[-1] bg-[#050505]" />
-      <div className="fixed inset-0 z-[-1] opacity-[0.03] pointer-events-none" style={{ backgroundImage: 'radial-gradient(circle at 2px 2px, #ffd700 1px, transparent 0)', backgroundSize: '24px 24px' }} />
-
+    <motion.div
+      animate={screenShake ? { x: [-10, 10, -10, 10, 0] } : {}}
+      className="space-y-12 p-4 md:p-8 min-h-screen relative text-white overflow-hidden"
+    >
       {/* Header - Stacks on mobile, inline on desktop */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6 mb-10 border-b border-yellow-500/20 pb-6">
         <div>
            <h2 className="text-4xl md:text-5xl font-black italic uppercase tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-yellow-500 via-yellow-200 to-yellow-600 drop-shadow-[0_0_15px_rgba(234,179,8,0.3)]">Match Day</h2>
-           <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-2">Manage Tournaments & Record Scores</p>
+           <p className="text-xs text-gray-400 font-bold uppercase tracking-widest mt-2">Manage Tournaments & Record Scores</p>
         </div>
-        <button 
-          onClick={() => { setWizardStep(1); setShowCreateModal(true); }} 
-          className="w-full sm:w-auto bg-gradient-to-r from-yellow-600 to-yellow-500 px-8 py-4 rounded-2xl font-black uppercase text-xs tracking-widest text-black shadow-[0_0_20px_rgba(234,179,8,0.4)] hover:scale-105 active:scale-95 transition-all z-20 flex items-center justify-center gap-2"
+        <motion.button 
+          onClick={(e) => openWithClick(() => { setWizardStep(1); setShowCreateModal(true); }, e)} 
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+          className="w-full sm:w-auto bg-gradient-to-r from-yellow-600 to-yellow-500 px-8 py-4 rounded-2xl font-black uppercase text-xs tracking-widest text-black shadow-[0_0_20px_rgba(234,179,8,0.4)] z-20 flex items-center justify-center gap-2"
         >
           <Trophy className="w-4 h-4" /> Create Tournament
-        </button>
+        </motion.button>
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
@@ -198,12 +215,12 @@ export default function MatchDay({ belloMode, onGoalScored }) {
                 
                 {/* Action Buttons - Stacked on very small screens */}
                 <div className="flex flex-wrap gap-2 mt-5">
-                  <button onClick={() => { setActiveTournament(t); setShowMatchModal(true); }} className="flex items-center gap-2 text-[10px] font-black uppercase bg-yellow-500 text-black px-4 py-2.5 rounded-xl shadow-[0_0_10px_rgba(234,179,8,0.3)] hover:scale-105 active:scale-95 transition-all">
+                  <motion.button onClick={(e) => openWithClick(() => { setActiveTournament(t); setShowMatchModal(true); }, e)} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} className="flex items-center gap-2 text-[10px] font-black uppercase bg-yellow-500 text-black px-4 py-2.5 rounded-xl shadow-[0_0_10px_rgba(234,179,8,0.3)]">
                     <Sword className="w-3 h-3" /> Play Match
-                  </button>
-                  <button onClick={() => { setEditingTournament(t); setSelectedForTeam([]); setShowEditModal(true); }} className="flex items-center gap-2 text-[10px] font-black uppercase bg-white/5 text-gray-300 px-4 py-2.5 rounded-xl border border-white/10 hover:border-yellow-500 hover:text-yellow-500 active:scale-95 transition-all">
+                  </motion.button>
+                  <motion.button onClick={(e) => openWithClick(() => { setEditingTournament(t); setSelectedForTeam([]); setShowEditModal(true); }, e)} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} className="flex items-center gap-2 text-[10px] font-black uppercase bg-white/5 text-gray-300 px-4 py-2.5 rounded-xl border border-white/10 hover:border-yellow-500 hover:text-yellow-500">
                     <UserPlus className="w-3 h-3" /> Add Team
-                  </button>
+                  </motion.button>
                 </div>
               </div>
               <img src={leagues.find(l => l.name === t.type)?.logo} className="w-14 h-14 sm:w-16 sm:h-16 object-contain filter brightness-125 drop-shadow-[0_0_10px_rgba(255,255,255,0.2)]" />
@@ -221,14 +238,14 @@ export default function MatchDay({ belloMode, onGoalScored }) {
                           </div>
                         ))}
                       </div>
-                      <span className="text-xs sm:text-sm font-black text-white uppercase tracking-tight truncate">{team.name}</span>
+                      <span className="font-sport text-base sm:text-lg font-semibold text-white tracking-wide truncate drop-shadow-[0_0_8px_rgba(234,179,8,0.3)]">{toTitleCase(team.name || '')}</span>
                     </div>
                     <div className="text-xl sm:text-2xl font-black text-yellow-500 italic drop-shadow-md shrink-0">{team.pts} <span className="text-[8px] sm:text-[9px] not-italic text-gray-500 ml-0.5">PTS</span></div>
                   </div>
                   <div className="flex flex-wrap gap-4 border-t border-white/5 pt-3">
                     {team.playerData?.map((p, idx) => (
                       <div key={idx} className="flex items-center gap-2">
-                        <span className="text-[9px] font-black text-yellow-500 uppercase">{p.name.split(' ')[0]}</span>
+                        <span className="font-sport text-xs sm:text-sm font-semibold text-yellow-500">{toTitleCase(p?.name || '').split(' ')[0]}</span>
                         <span className="text-[9px] font-bold text-gray-400 flex items-center gap-1"><Goal className="w-3 h-3 text-white/40"/> {p.tournamentGoals || 0}</span>
                         <span className="text-[9px] font-bold text-gray-400 flex items-center gap-1"><Star className="w-3 h-3 text-white/40"/> {p.tournamentAssists || 0}</span>
                       </div>
@@ -259,8 +276,8 @@ export default function MatchDay({ belloMode, onGoalScored }) {
                 className="absolute -right-2 -bottom-2 w-16 h-16 sm:w-20 sm:h-20 object-contain opacity-[0.02] group-hover:opacity-[0.08] transition-opacity pointer-events-none" 
               />
               <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto relative z-10">
-                <span className="text-xs sm:text-sm font-black text-white uppercase tracking-tight text-center sm:text-left leading-tight group-hover:text-yellow-400 transition-colors">
-                  {m.homeTeam}
+                <span className="font-sport text-base sm:text-lg font-semibold text-white tracking-wide text-center sm:text-left leading-tight group-hover:text-yellow-400 transition-colors drop-shadow-md">
+                  {toTitleCase(m.homeTeam || '')}
                 </span>
                 <div className="flex items-center gap-2">
                   <div className="w-8 sm:w-4 h-[1px] bg-white/10 sm:hidden" />
@@ -269,8 +286,8 @@ export default function MatchDay({ belloMode, onGoalScored }) {
                   </span>
                   <div className="w-8 sm:w-4 h-[1px] bg-white/10 sm:hidden" />
                 </div>
-                <span className="text-xs sm:text-sm font-black text-white uppercase tracking-tight text-center sm:text-left leading-tight group-hover:text-yellow-400 transition-colors">
-                  {m.awayTeam}
+                <span className="font-sport text-base sm:text-lg font-semibold text-white tracking-wide text-center sm:text-left leading-tight group-hover:text-yellow-400 transition-colors drop-shadow-md">
+                  {toTitleCase(m.awayTeam || '')}
                 </span>
               </div>
               <div className="flex flex-col items-center relative z-10 w-full sm:w-auto">
@@ -285,7 +302,7 @@ export default function MatchDay({ belloMode, onGoalScored }) {
               </div>
             </div>
           )) : (
-            <p className="text-gray-500 text-[10px] font-black uppercase tracking-widest italic">No matches recorded yet...</p>
+            <p className="text-gray-500 text-xs font-black uppercase tracking-widest italic">No matches recorded yet...</p>
           )}
         </div>
       </div>
@@ -300,7 +317,13 @@ export default function MatchDay({ belloMode, onGoalScored }) {
           <AnimatePresence>
             {showCreateModal && (
               <div className="fixed inset-0 flex items-center justify-center bg-black/90 backdrop-blur-md p-4">
-                <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="bg-[#0a0a0c] border border-yellow-500/30 w-full max-w-2xl p-6 sm:p-10 rounded-[30px] sm:rounded-[40px] shadow-[0_0_50px_rgba(234,179,8,0.15)] relative max-h-[90vh] overflow-y-auto custom-scrollbar">
+                <motion.div
+                  initial={getClickOriginVariant()}
+                  animate={{ scale: 1, opacity: 1, x: 0, y: 0 }}
+                  exit={getClickOriginVariant()}
+                  transition={{ type: "spring", stiffness: 350, damping: 28 }}
+                  className="bg-[#0a0a0c] border border-yellow-500/30 w-full max-w-2xl p-6 sm:p-10 rounded-[30px] sm:rounded-[40px] shadow-[0_0_50px_rgba(234,179,8,0.15)] relative max-h-[90vh] overflow-y-auto custom-scrollbar"
+                >
                   <button onClick={() => setShowCreateModal(false)} className="absolute top-6 right-6 sm:top-8 sm:right-8 text-gray-500 hover:text-white transition-colors"><X /></button>
                   <div className="mb-8 sm:mb-12 text-center mt-4 sm:mt-0">
                     <p className="text-yellow-500 text-[10px] font-black tracking-widest uppercase mb-1 sm:mb-2">Tournament Builder</p>
@@ -312,26 +335,26 @@ export default function MatchDay({ belloMode, onGoalScored }) {
                   {wizardStep === 1 && (
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 sm:gap-6">
                       {leagues.map(l => (
-                        <button key={l.name} onClick={() => { setNewTournament({...newTournament, type: l.name}); setWizardStep(2); }} className="p-6 sm:p-8 rounded-[24px] sm:rounded-[32px] bg-black border border-white/5 flex flex-col items-center hover:border-yellow-500 hover:shadow-[0_0_20px_rgba(234,179,8,0.2)] transition-all group active:scale-95">
+                        <motion.button key={l.name} onClick={() => { setNewTournament({...newTournament, type: l.name}); setWizardStep(2); }} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} className="p-6 sm:p-8 rounded-[24px] sm:rounded-[32px] bg-black border border-white/5 flex flex-col items-center hover:border-yellow-500 hover:shadow-[0_0_20px_rgba(234,179,8,0.2)] group">
                           <div className="w-12 h-12 sm:w-16 sm:h-16 mb-3 sm:mb-4 flex items-center justify-center">
                             <img src={l.logo} className="w-full h-full object-contain group-hover:scale-110 transition-transform" />
                           </div>
                           <p className="text-[9px] sm:text-[10px] font-black uppercase text-center text-gray-300 tracking-widest group-hover:text-yellow-400">{l.name}</p>
-                        </button>
+                        </motion.button>
                       ))}
                     </div>
                   )}
 
                   {wizardStep === 2 && (
                     <div className="flex flex-col sm:flex-row gap-4 sm:gap-8">
-                      <button onClick={() => {setNewTournament({...newTournament, format: '1v1'}); setWizardStep(3)}} className="flex-1 p-10 sm:p-16 rounded-[30px] sm:rounded-[40px] bg-black border border-white/5 hover:border-yellow-500 hover:shadow-[0_0_20px_rgba(234,179,8,0.2)] transition-all group text-center active:scale-95">
+                      <motion.button onClick={() => {setNewTournament({...newTournament, format: '1v1'}); setWizardStep(3)}} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} className="flex-1 p-10 sm:p-16 rounded-[30px] sm:rounded-[40px] bg-black border border-white/5 hover:border-yellow-500 hover:shadow-[0_0_20px_rgba(234,179,8,0.2)] group text-center">
                         <User className="w-10 h-10 sm:w-12 sm:h-12 mx-auto mb-4 sm:mb-6 text-gray-600 group-hover:text-yellow-500 transition-colors" />
                         <p className="text-4xl sm:text-5xl font-black uppercase italic tracking-tighter text-white">1 <span className="text-yellow-500">v</span> 1</p>
-                      </button>
-                      <button onClick={() => {setNewTournament({...newTournament, format: '2v2'}); setWizardStep(3)}} className="flex-1 p-10 sm:p-16 rounded-[30px] sm:rounded-[40px] bg-black border border-white/5 hover:border-yellow-500 hover:shadow-[0_0_20px_rgba(234,179,8,0.2)] transition-all group text-center active:scale-95">
+                      </motion.button>
+                      <motion.button onClick={() => {setNewTournament({...newTournament, format: '2v2'}); setWizardStep(3)}} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} className="flex-1 p-10 sm:p-16 rounded-[30px] sm:rounded-[40px] bg-black border border-white/5 hover:border-yellow-500 hover:shadow-[0_0_20px_rgba(234,179,8,0.2)] group text-center">
                         <Users className="w-10 h-10 sm:w-12 sm:h-12 mx-auto mb-4 sm:mb-6 text-gray-600 group-hover:text-yellow-500 transition-colors" />
                         <p className="text-4xl sm:text-5xl font-black uppercase italic tracking-tighter text-white">2 <span className="text-yellow-500">v</span> 2</p>
-                      </button>
+                      </motion.button>
                     </div>
                   )}
 
@@ -346,18 +369,18 @@ export default function MatchDay({ belloMode, onGoalScored }) {
                               <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full overflow-hidden bg-[#121212] border border-white/10 shrink-0">
                                 <video src={p.videoUrl} autoPlay loop muted playsInline className="w-full h-full object-cover scale-110" />
                               </div>
-                              <span className="text-[11px] sm:text-xs font-black uppercase tracking-tight text-left leading-none">{p.name}</span>
+                              <span className="font-sport text-base sm:text-lg font-semibold tracking-wide text-left leading-none">{toTitleCase(p?.name || '')}</span>
                             </button>
                           );
                         })}
                       </div>
                       <div className="flex flex-col gap-3 sm:gap-4">
-                        <button disabled={selectedForTeam.length < (newTournament.format === '2v2' ? 2 : 1)} onClick={addTeamToTournament} className="w-full py-4 sm:py-5 bg-black border border-white/10 rounded-[20px] font-black text-[10px] sm:text-xs uppercase tracking-widest text-white hover:bg-yellow-500/10 hover:border-yellow-500 hover:text-yellow-500 transition-all disabled:opacity-30 active:scale-95">
+                        <motion.button disabled={selectedForTeam.length < (newTournament.format === '2v2' ? 2 : 1)} onClick={addTeamToTournament} whileHover={{ scale: selectedForTeam.length >= (newTournament.format === '2v2' ? 2 : 1) ? 1.02 : 1 }} whileTap={{ scale: 0.98 }} className="w-full py-4 sm:py-5 bg-black border border-white/10 rounded-[20px] font-black text-[10px] sm:text-xs uppercase tracking-widest text-white hover:bg-yellow-500/10 hover:border-yellow-500 hover:text-yellow-500 disabled:opacity-30">
                           Lock Team ({newTournament.teams.length} Added)
-                        </button>
-                        <button onClick={handleForge} disabled={newTournament.teams.length < 2} className="w-full py-5 sm:py-6 bg-gradient-to-r from-yellow-600 to-yellow-500 text-black rounded-[20px] font-black uppercase tracking-[0.2em] sm:tracking-[0.3em] text-xs sm:text-sm shadow-[0_0_20px_rgba(234,179,8,0.4)] flex items-center justify-center gap-3 hover:scale-[1.02] active:scale-95 transition-transform disabled:opacity-50 disabled:grayscale">
+                        </motion.button>
+                        <motion.button onClick={handleForge} disabled={newTournament.teams.length < 2} whileHover={{ scale: newTournament.teams.length >= 2 ? 1.02 : 1 }} whileTap={{ scale: 0.98 }} className="w-full py-5 sm:py-6 bg-gradient-to-r from-yellow-600 to-yellow-500 text-black rounded-[20px] font-black uppercase tracking-[0.2em] sm:tracking-[0.3em] text-xs sm:text-sm shadow-[0_0_20px_rgba(234,179,8,0.4)] flex items-center justify-center gap-3 disabled:opacity-50 disabled:grayscale">
                           <Trophy className="w-4 h-4 sm:w-5 sm:h-5" /> Forge League
-                        </button>
+                        </motion.button>
                       </div>
                     </div>
                   )}
@@ -370,7 +393,13 @@ export default function MatchDay({ belloMode, onGoalScored }) {
           <AnimatePresence>
             {showEditModal && editingTournament && (
               <div className="fixed inset-0 flex items-center justify-center bg-black/90 backdrop-blur-md p-4">
-                <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="bg-[#0a0a0c] border border-yellow-500/30 w-full max-w-2xl p-6 sm:p-10 rounded-[30px] sm:rounded-[40px] shadow-[0_0_50px_rgba(234,179,8,0.15)] relative max-h-[90vh] overflow-y-auto custom-scrollbar">
+                <motion.div
+                  initial={getClickOriginVariant()}
+                  animate={{ scale: 1, opacity: 1, x: 0, y: 0 }}
+                  exit={getClickOriginVariant()}
+                  transition={{ type: "spring", stiffness: 350, damping: 28 }}
+                  className="bg-[#0a0a0c] border border-yellow-500/30 w-full max-w-2xl p-6 sm:p-10 rounded-[30px] sm:rounded-[40px] shadow-[0_0_50px_rgba(234,179,8,0.15)] relative max-h-[90vh] overflow-y-auto custom-scrollbar"
+                >
                   <button onClick={() => { setShowEditModal(false); setEditingTournament(null); }} className="absolute top-6 right-6 sm:top-8 sm:right-8 text-gray-500 hover:text-white transition-colors"><X /></button>
                   <div className="mb-8 sm:mb-10 text-center mt-4 sm:mt-0">
                     <p className="text-yellow-500 text-[10px] font-black tracking-widest uppercase mb-1 sm:mb-2">Late Entry</p>
@@ -390,15 +419,15 @@ export default function MatchDay({ belloMode, onGoalScored }) {
                             <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full overflow-hidden bg-[#121212] border border-white/10 shrink-0">
                               <video src={p.videoUrl} autoPlay loop muted playsInline className="w-full h-full object-cover scale-110" />
                             </div>
-                            <span className="text-[11px] sm:text-xs font-black uppercase tracking-tight text-left leading-none">{p.name}</span>
+                            <span className="font-sport text-base sm:text-lg font-semibold tracking-wide text-left leading-none">{toTitleCase(p?.name || '')}</span>
                           </button>
                         );
                       })}
                     </div>
                     
-                    <button disabled={selectedForTeam.length < (editingTournament.format === '2v2' ? 2 : 1)} onClick={handleAddTeamToExisting} className="w-full py-5 sm:py-6 bg-gradient-to-r from-yellow-600 to-yellow-500 text-black rounded-[20px] font-black uppercase tracking-[0.2em] sm:tracking-[0.3em] text-xs sm:text-sm shadow-[0_0_20px_rgba(234,179,8,0.4)] flex items-center justify-center gap-3 hover:scale-[1.02] active:scale-95 transition-transform disabled:opacity-50 disabled:grayscale">
+                    <motion.button disabled={selectedForTeam.length < (editingTournament.format === '2v2' ? 2 : 1)} onClick={handleAddTeamToExisting} whileHover={{ scale: selectedForTeam.length >= (editingTournament.format === '2v2' ? 2 : 1) ? 1.02 : 1 }} whileTap={{ scale: 0.98 }} className="w-full py-5 sm:py-6 bg-gradient-to-r from-yellow-600 to-yellow-500 text-black rounded-[20px] font-black uppercase tracking-[0.2em] sm:tracking-[0.3em] text-xs sm:text-sm shadow-[0_0_20px_rgba(234,179,8,0.4)] flex items-center justify-center gap-3 disabled:opacity-50 disabled:grayscale">
                       <UserPlus className="w-4 h-4 sm:w-5 sm:h-5" /> Add Team to League
-                    </button>
+                    </motion.button>
                   </div>
                 </motion.div>
               </div>
@@ -409,7 +438,13 @@ export default function MatchDay({ belloMode, onGoalScored }) {
           <AnimatePresence>
             {showMatchModal && (
               <div className="fixed inset-0 flex items-center justify-center bg-black/90 backdrop-blur-md p-4">
-                <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="bg-[#0a0a0c] border border-yellow-500/30 w-full max-w-2xl p-6 sm:p-10 rounded-[30px] sm:rounded-[40px] relative shadow-[0_0_50px_rgba(234,179,8,0.15)] max-h-[90vh] overflow-y-auto custom-scrollbar">
+                <motion.div
+                  initial={getClickOriginVariant()}
+                  animate={{ scale: 1, opacity: 1, x: 0, y: 0 }}
+                  exit={getClickOriginVariant()}
+                  transition={{ type: "spring", stiffness: 350, damping: 28 }}
+                  className="bg-[#0a0a0c] border border-yellow-500/30 w-full max-w-2xl p-6 sm:p-10 rounded-[30px] sm:rounded-[40px] relative shadow-[0_0_50px_rgba(234,179,8,0.15)] max-h-[90vh] overflow-y-auto custom-scrollbar"
+                >
                   <button onClick={() => setShowMatchModal(false)} className="absolute top-6 right-6 sm:top-8 sm:right-8 text-gray-500 hover:text-white transition-colors"><X /></button>
                   <div className="text-center mb-8 sm:mb-10 mt-4 sm:mt-0">
                     <p className="text-yellow-500 text-[10px] font-black tracking-widest uppercase mb-1 sm:mb-2">Final Whistle</p>
@@ -418,14 +453,22 @@ export default function MatchDay({ belloMode, onGoalScored }) {
                   
                   <div className="space-y-6 sm:space-y-8">
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                      <select onChange={(e) => setMatchData({...matchData, homeTeam: activeTournament.teams[e.target.value]})} className="bg-black border border-white/10 p-4 sm:p-5 rounded-xl sm:rounded-2xl font-black text-xs text-white outline-none focus:border-yellow-500 transition-colors">
-                        <option value="">Select Home Side</option>
-                        {activeTournament.teams.map((team, idx) => (<option key={idx} value={idx} disabled={matchData.awayTeam?.name === team.name}>{team.name}</option>))}
-                      </select>
-                      <select onChange={(e) => setMatchData({...matchData, awayTeam: activeTournament.teams[e.target.value]})} className="bg-black border border-white/10 p-4 sm:p-5 rounded-xl sm:rounded-2xl font-black text-xs text-white outline-none focus:border-yellow-500 transition-colors">
-                        <option value="">Select Away Side</option>
-                        {activeTournament.teams.map((team, idx) => (<option key={idx} value={idx} disabled={matchData.homeTeam?.name === team.name}>{team.name}</option>))}
-                      </select>
+                      <AnimatedDropdown
+                        options={activeTournament.teams.map(team => ({ value: team.name, label: toTitleCase(team.name || ''), raw: team }))}
+                        value={matchData.homeTeam ? { value: matchData.homeTeam.name, label: toTitleCase(matchData.homeTeam.name || ''), raw: matchData.homeTeam } : null}
+                        onChange={(opt) => setMatchData({...matchData, homeTeam: opt.raw})}
+                        placeholder="Select Home Side"
+                        isDisabled={(opt) => matchData.awayTeam?.name === opt.raw?.name}
+                        isDark={true}
+                      />
+                      <AnimatedDropdown
+                        options={activeTournament.teams.map(team => ({ value: team.name, label: toTitleCase(team.name || ''), raw: team }))}
+                        value={matchData.awayTeam ? { value: matchData.awayTeam.name, label: toTitleCase(matchData.awayTeam.name || ''), raw: matchData.awayTeam } : null}
+                        onChange={(opt) => setMatchData({...matchData, awayTeam: opt.raw})}
+                        placeholder="Select Away Side"
+                        isDisabled={(opt) => matchData.homeTeam?.name === opt.raw?.name}
+                        isDark={true}
+                      />
                     </div>
 
                     <div className="flex items-center justify-center gap-6 sm:gap-10 bg-black/50 p-6 sm:p-8 rounded-[24px] sm:rounded-3xl border border-white/5">
@@ -452,10 +495,10 @@ export default function MatchDay({ belloMode, onGoalScored }) {
                           {[matchData.homeTeam, matchData.awayTeam].map((team, tIdx) => (
                             team && (
                               <div key={tIdx} className="space-y-3 sm:space-y-4 bg-black/40 p-4 sm:p-5 rounded-2xl border border-white/5">
-                                <p className="text-[11px] sm:text-xs font-black uppercase text-white border-b border-white/10 pb-2 mb-3 sm:mb-4">{team.name}</p>
+                                <p className="font-sport text-base sm:text-lg font-semibold text-white border-b border-white/10 pb-2 mb-3 sm:mb-4 tracking-wide">{toTitleCase(team.name || '')}</p>
                                 {team.playerData?.map(p => (
                                   <div key={p.id} className="flex items-center justify-between gap-3">
-                                    <span className="text-[10px] font-bold text-gray-300 uppercase truncate flex-1">{p.name.split(' ')[0]}</span>
+                                    <span className="font-sport text-sm font-semibold text-gray-300 truncate flex-1">{toTitleCase(p?.name || '').split(' ')[0]}</span>
                                     <input 
                                       type="number" placeholder="0" 
                                       value={matchData.playerGoals[p.id] || ''} 
@@ -477,13 +520,15 @@ export default function MatchDay({ belloMode, onGoalScored }) {
                       </div>
                     )}
                     
-                    <button 
+                    <motion.button 
                       disabled={!isScoreValid()} 
-                      onClick={handleUpdateScore} 
-                      className={`w-full py-5 sm:py-6 rounded-2xl font-black uppercase tracking-[0.2em] sm:tracking-[0.3em] text-xs sm:text-sm transition-all mt-2 sm:mt-0 ${isScoreValid() ? 'bg-gradient-to-r from-yellow-600 to-yellow-500 text-black shadow-[0_0_20px_rgba(234,179,8,0.4)] hover:scale-[1.02] active:scale-95' : 'bg-[#121212] text-gray-600 border border-white/5 cursor-not-allowed'}`}
+                      onClick={handleUpdateScore}
+                      whileHover={{ scale: isScoreValid() ? 1.02 : 1 }}
+                      whileTap={{ scale: 0.98 }}
+                      className={`w-full py-5 sm:py-6 rounded-2xl font-black uppercase tracking-[0.2em] sm:tracking-[0.3em] text-xs sm:text-sm transition-all mt-2 sm:mt-0 ${isScoreValid() ? 'bg-gradient-to-r from-yellow-600 to-yellow-500 text-black shadow-[0_0_20px_rgba(234,179,8,0.4)]' : 'bg-[#121212] text-gray-600 border border-white/5 cursor-not-allowed'}`}
                     >
                       Submit Match Result
-                    </button>
+                    </motion.button>
                   </div>
                 </motion.div>
               </div>
