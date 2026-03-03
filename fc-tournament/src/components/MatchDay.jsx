@@ -295,43 +295,55 @@ export default function MatchDay({ onGoalScored }) {
         
         <div className="flex items-center gap-3 mb-8 sm:mb-10">
            <History className="text-yellow-500 w-6 h-6 sm:w-7 sm:h-7" />
-           <h3 className="text-2xl sm:text-3xl font-black italic uppercase tracking-tighter text-white drop-shadow-md">Match History</h3>
+           <h3 className="text-3xl md:text-4xl font-black italic uppercase tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-yellow-500 via-yellow-200 to-yellow-600 drop-shadow-[0_0_15px_rgba(234,179,8,0.3)]">
+             Match History
+           </h3>
         </div>
         
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
-          {matches.length > 0 ? matches.map(m => (
-            <div key={m.id} className="bg-black p-5 sm:p-6 rounded-3xl border border-white/5 flex flex-col sm:flex-row items-center justify-between gap-4 hover:border-yellow-500/40 transition-all group relative overflow-hidden">
-              <img 
-                src={leagues.find(l => l.name === m.tournamentType)?.logo} 
-                className="absolute -right-2 -bottom-2 w-16 h-16 sm:w-20 sm:h-20 object-contain opacity-[0.02] group-hover:opacity-[0.08] transition-opacity pointer-events-none" 
-              />
-              <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto relative z-10">
-                <span className="font-sport text-base sm:text-lg font-semibold text-white tracking-wide text-center sm:text-left leading-tight group-hover:text-yellow-400 transition-colors drop-shadow-md">
-                  {toTitleCase(m.homeTeam || '')}
-                </span>
-                <div className="flex items-center gap-2">
-                  <div className="w-8 sm:w-4 h-[1px] bg-white/10 sm:hidden" />
-                  <span className="text-[8px] sm:text-[9px] font-black italic tracking-widest text-yellow-500 px-2.5 py-1 bg-yellow-500/10 rounded-md border border-yellow-500/20">
-                    VS
+          {matches.length > 0 ? matches.map(m => {
+            const homeScore = Number(m.homeScore) || 0;
+            const awayScore = Number(m.awayScore) || 0;
+            const isHomeWinner = homeScore > awayScore;
+            const isAwayWinner = awayScore > homeScore;
+            const baseNameClasses = "font-sport text-base sm:text-lg font-semibold tracking-wide text-center sm:text-left leading-tight transition-colors drop-shadow-md";
+            const homeNameClasses = `${baseNameClasses} ${isHomeWinner ? 'text-emerald-400' : isAwayWinner ? 'text-red-400' : 'text-white'}`;
+            const awayNameClasses = `${baseNameClasses} ${isAwayWinner ? 'text-emerald-400' : isHomeWinner ? 'text-red-400' : 'text-white'}`;
+
+            return (
+              <div key={m.id} className="bg-black p-5 sm:p-6 rounded-3xl border border-white/5 flex flex-col sm:flex-row items-center justify-between gap-4 hover:border-yellow-500/40 transition-all group relative overflow-hidden">
+                <img 
+                  src={leagues.find(l => l.name === m.tournamentType)?.logo} 
+                  className="absolute -right-2 -bottom-2 w-16 h-16 sm:w-20 sm:h-20 object-contain opacity-[0.02] group-hover:opacity-[0.08] transition-opacity pointer-events-none" 
+                />
+                <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto relative z-10">
+                  <span className={homeNameClasses}>
+                    {toTitleCase(m.homeTeam || '')}
                   </span>
-                  <div className="w-8 sm:w-4 h-[1px] bg-white/10 sm:hidden" />
-                </div>
-                <span className="font-sport text-base sm:text-lg font-semibold text-white tracking-wide text-center sm:text-left leading-tight group-hover:text-yellow-400 transition-colors drop-shadow-md">
-                  {toTitleCase(m.awayTeam || '')}
-                </span>
-              </div>
-              <div className="flex flex-col items-center relative z-10 w-full sm:w-auto">
-                <div className="w-full sm:w-auto text-center bg-[#121212] px-6 py-2.5 sm:py-3 rounded-2xl border border-white/10 shadow-xl min-w-[110px] group-hover:border-yellow-500/50 transition-colors">
-                  <span className="text-2xl sm:text-3xl font-black italic text-white tracking-tighter drop-shadow-md">
-                    {m.homeScore} <span className="text-yellow-500 mx-1">:</span> {m.awayScore}
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 sm:w-4 h-[1px] bg-white/10 sm:hidden" />
+                    <span className="text-[8px] sm:text-[9px] font-black italic tracking-widest text-yellow-500 px-2.5 py-1 bg-yellow-500/10 rounded-md border border-yellow-500/20">
+                      VS
+                    </span>
+                    <div className="w-8 sm:w-4 h-[1px] bg-white/10 sm:hidden" />
+                  </div>
+                  <span className={awayNameClasses}>
+                    {toTitleCase(m.awayTeam || '')}
                   </span>
                 </div>
-                <p className="text-[8px] sm:text-[9px] font-black text-gray-500 uppercase mt-2 tracking-[0.2em]">
-                  {m.tournamentType.replace('e', '')}
-                </p>
+                <div className="flex flex-col items-center relative z-10 w-full sm:w-auto">
+                  <div className="w-full sm:w-auto text-center bg-[#121212] px-6 py-2.5 sm:py-3 rounded-2xl border border-white/10 shadow-xl min-w-[110px] group-hover:border-yellow-500/50 transition-colors">
+                    <span className="text-2xl sm:text-3xl font-black italic text-white tracking-tighter drop-shadow-md">
+                      {m.homeScore} <span className="text-yellow-500 mx-1">:</span> {m.awayScore}
+                    </span>
+                  </div>
+                  <p className="text-[8px] sm:text-[9px] font-black text-gray-500 uppercase mt-2 tracking-[0.2em]">
+                    {m.tournamentType.replace('e', '')}
+                  </p>
+                </div>
               </div>
-            </div>
-          )) : (
+            );
+          }) : (
             <p className="text-gray-500 text-xs font-black uppercase tracking-widest italic">No matches recorded yet...</p>
           )}
         </div>
