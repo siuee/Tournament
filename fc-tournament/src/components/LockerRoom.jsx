@@ -5,6 +5,7 @@ import { db, storage } from '../firebase';
 import { collection, getDocs, doc, setDoc, deleteDoc, writeBatch } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { motion, AnimatePresence } from 'framer-motion';
+import { verifyDeletePassword } from '../lib/security';
 
 export default function LockerRoom() {
   const [players, setPlayers] = useState([]);
@@ -233,12 +234,24 @@ export default function LockerRoom() {
   };
 
   const handleDeletePlayer = async (id) => {
-    const password = prompt("Enter Admin Password to delete player:");
-    if (password === "Supshzz1") {
+    const password = window.prompt("Enter admin password to delete this player:");
+    if (!password) return;
+
+    const ok = await verifyDeletePassword(password);
+    if (!ok) {
+      alert("Incorrect password. Player was not deleted.");
+      return;
+    }
+
+    const sure = window.confirm("Are you sure you want to permanently delete this player from the squad?");
+    if (!sure) return;
+
+    try {
       await deleteDoc(doc(db, "players", id));
       fetchPlayersAndSyncSeason();
-    } else {
-      alert("Incorrect Password!");
+    } catch (e) {
+      console.error("Failed to delete player:", e);
+      alert("Something went wrong while deleting the player. Please try again.");
     }
   };
 

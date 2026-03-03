@@ -6,6 +6,7 @@ import { Plus, Users, User, X, Trash2, Goal, Star, Trophy, Sword, AlertCircle, H
 import { AnimatedDropdown } from './ui/dropdown-01';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toTitleCase } from '../lib/utils';
+import { verifyDeletePassword } from '../lib/security';
 
 export default function MatchDay({ onGoalScored }) {
   const [players, setPlayers] = useState([]);
@@ -180,6 +181,28 @@ export default function MatchDay({ onGoalScored }) {
     setSelectedForTeam([]);
   };
 
+  const handleDeleteTournament = async (id) => {
+    const password = window.prompt("Enter admin password to delete this league:");
+    if (!password) return;
+
+    const ok = await verifyDeletePassword(password);
+    if (!ok) {
+      alert("Incorrect password. League was not deleted.");
+      return;
+    }
+
+    const sure = window.confirm("Are you sure you want to permanently delete this league?");
+    if (!sure) return;
+
+    try {
+      await deleteDoc(doc(db, "tournaments", id));
+      fetchData();
+    } catch (e) {
+      console.error("Failed to delete league:", e);
+      alert("Something went wrong while deleting the league. Please try again.");
+    }
+  };
+
   return (
     <motion.div
       animate={screenShake ? { x: [-10, 10, -10, 10, 0] } : {}}
@@ -222,7 +245,7 @@ export default function MatchDay({ onGoalScored }) {
                     <UserPlus className="w-3 h-3" /> Add Team
                   </motion.button>
                   <motion.button 
-                    onClick={() => {if(confirm("Delete league?")) { deleteDoc(doc(db, "tournaments", t.id)); fetchData(); }}}
+                    onClick={() => handleDeleteTournament(t.id)}
                     whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
                     className="flex items-center gap-2 text-[10px] font-black uppercase bg-red-500/20 text-red-400 px-4 py-2.5 rounded-xl border border-red-500/50 hover:bg-red-500 hover:text-white hover:border-red-500"
                     title="Delete league"
