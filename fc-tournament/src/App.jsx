@@ -219,10 +219,8 @@ function App() {
           </AnimatePresence>
         </main>
 
-        {/* Theme controls - desktop only (background is gradient on mobile) */}
-        <div className="hidden md:block">
-          <ShockwaveControls />
-        </div>
+        {/* Theme controls - visible on all screen sizes */}
+        <ShockwaveControls />
 
         {/* --- MOBILE CURVED TAB BAR --- */}
         <nav className="md:hidden fixed bottom-6 left-4 right-4 z-[100]">
@@ -402,7 +400,7 @@ const ShockwaveControls = () => {
   ];
 
   return (
-    <div className="fixed bottom-4 left-4 z-[200]">
+    <div className="fixed bottom-24 left-4 md:bottom-4 z-[200]">
       <AnimatedSocialIcons icons={themeIcons} iconSize={20} className="w-auto" />
     </div>
   );
