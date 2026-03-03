@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom'; // <--- The magic fix!
 import { db } from '../firebase';
-import { collection, getDocs, addDoc, deleteDoc, doc, updateDoc, query, orderBy, limit } from 'firebase/firestore';
-import { Plus, Users, User, X, Trash2, Goal, Star, Trophy, Sword, AlertCircle, History, UserPlus } from 'lucide-react';
+import { collection, getDocs, addDoc, deleteDoc, doc, updateDoc, query, where, orderBy, limit, writeBatch } from 'firebase/firestore';
+import { Plus, Users, User, X, Trash2, Goal, Star, Trophy, Sword, AlertCircle, History, UserPlus, Edit2, Loader2 } from 'lucide-react';
 import { AnimatedDropdown } from './ui/dropdown-01';
 import { motion, AnimatePresence } from 'framer-motion';
-import { toTitleCase } from '../lib/utils';
+import { toTitleCase, formatTeamDisplay, formatMatchHistoryTeam, matchTeamToMatch, calculateOvrFromGoalsAssists } from '../lib/utils';
+import { TeamDisplay } from './TeamDisplay';
 import { verifyDeletePassword } from '../lib/security';
 
 export default function MatchDay({ onGoalScored }) {
@@ -29,6 +30,13 @@ export default function MatchDay({ onGoalScored }) {
 
   const [newTournament, setNewTournament] = useState({ type: '', format: '2v2', teams: [] });
   const [selectedForTeam, setSelectedForTeam] = useState([]);
+  const [teamNameInput, setTeamNameInput] = useState('');
+  const [editingTeamName, setEditingTeamName] = useState(null);
+  const [editTeamNameInput, setEditTeamNameInput] = useState('');
+  const [deletingTournament, setDeletingTournament] = useState(null);
+  const [deletePassword, setDeletePassword] = useState('');
+  const [deleteError, setDeleteError] = useState('');
+  const [deleteLoading, setDeleteLoading] = useState(false);
   const clickOriginRef = useRef({ x: 0, y: 0 });
 
   const strikeSound = useRef(new Audio('https://assets.mixkit.co/active_storage/sfx/2019/2019-preview.mp3'));
@@ -134,9 +142,13 @@ export default function MatchDay({ onGoalScored }) {
 
     try {
       await updateDoc(doc(db, "tournaments", activeTournament.id), { teams: updatedTeams });
+      const homeTeamPlayerIds = (matchData.homeTeam.playerData || []).map(p => p.id).filter(Boolean).sort();
+      const awayTeamPlayerIds = (matchData.awayTeam.playerData || []).map(p => p.id).filter(Boolean).sort();
       await addDoc(collection(db, "matches"), {
+        tournamentId: activeTournament.id,
         tournamentType: activeTournament.type,
         homeTeam: matchData.homeTeam.name, awayTeam: matchData.awayTeam.name,
+        homeTeamPlayerIds, awayTeamPlayerIds,
         homeScore: homeS, awayScore: awayS,
         homePlayerGoals, awayPlayerGoals,
         createdAt: new Date()
@@ -156,12 +168,14 @@ export default function MatchDay({ onGoalScored }) {
       setShowCreateModal(false); 
       setWizardStep(1);
       setNewTournament({ type: '', format: '2v2', teams: [] });
+      setTeamNameInput('');
       fetchData();
     } catch (e) { console.error(e); }
   };
 
   const handleAddTeamToExisting = async () => {
-    const teamName = selectedForTeam.map(p => p.name).join(' & ');
+    const fallbackName = selectedForTeam.map(p => p.name).join(' & ');
+    const teamName = (teamNameInput?.trim() || fallbackName);
     const tournamentPlayerData = selectedForTeam.map(p => ({ id: p.id, name: p.name, videoUrl: p.videoUrl, tournamentGoals: 0, tournamentAssists: 0 }));
     const newTeam = { name: teamName, playerData: tournamentPlayerData, pts: 0, totalGoals: 0 };
     
@@ -172,6 +186,7 @@ export default function MatchDay({ onGoalScored }) {
       setShowEditModal(false);
       setEditingTournament(null);
       setSelectedForTeam([]);
+      setTeamNameInput('');
       fetchData();
     } catch (e) { console.error(e); }
   };
@@ -185,31 +200,140 @@ export default function MatchDay({ onGoalScored }) {
   };
 
   const addTeamToTournament = () => {
-    const teamName = selectedForTeam.map(p => p.name).join(' & ');
+    const fallbackName = selectedForTeam.map(p => p.name).join(' & ');
+    const teamName = (teamNameInput?.trim() || fallbackName);
     const tournamentPlayerData = selectedForTeam.map(p => ({ id: p.id, name: p.name, videoUrl: p.videoUrl, tournamentGoals: 0, tournamentAssists: 0 }));
     setNewTournament({ ...newTournament, teams: [...newTournament.teams, { name: teamName, playerData: tournamentPlayerData, pts: 0, totalGoals: 0 }] });
     setSelectedForTeam([]);
+    setTeamNameInput('');
   };
 
-  const handleDeleteTournament = async (id) => {
-    const password = window.prompt("Enter admin password to delete this league:");
-    if (!password) return;
+  const openEditTeamName = (tournament, team) => {
+    const teamIndex = tournament.teams?.findIndex(tm => tm === team) ?? -1;
+    setEditingTeamName({ tournament, teamIndex });
+    setEditTeamNameInput(team.name || '');
+  };
 
-    const ok = await verifyDeletePassword(password);
-    if (!ok) {
-      alert("Incorrect password. League was not deleted.");
+  const saveEditTeamName = async () => {
+    if (!editingTeamName) return;
+    const trimmed = editTeamNameInput?.trim();
+    if (!trimmed) return;
+    const { tournament, teamIndex } = editingTeamName;
+    if (teamIndex < 0 || teamIndex >= (tournament.teams?.length ?? 0)) return;
+    try {
+      const updatedTeams = tournament.teams.map((tm, idx) =>
+        idx === teamIndex ? { ...tm, name: trimmed } : tm
+      );
+      await updateDoc(doc(db, 'tournaments', tournament.id), { teams: updatedTeams });
+      setEditingTeamName(null);
+      setEditTeamNameInput('');
+      fetchData();
+    } catch (e) {
+      console.error('Failed to update team name:', e);
+    }
+  };
+
+  const openDeleteModal = (t) => {
+    setDeletingTournament(t);
+    setDeletePassword('');
+    setDeleteError('');
+  };
+
+  const closeDeleteModal = () => {
+    setDeletingTournament(null);
+    setDeletePassword('');
+    setDeleteError('');
+    setDeleteLoading(false);
+  };
+
+  const executeDeleteTournament = async () => {
+    if (!deletingTournament) return;
+    const password = deletePassword?.trim();
+    if (!password) {
+      setDeleteError("Please enter the admin password.");
       return;
     }
 
-    const sure = window.confirm("Are you sure you want to permanently delete this league?");
-    if (!sure) return;
+    const ok = await verifyDeletePassword(password);
+    if (!ok) {
+      setDeleteError("Incorrect password.");
+      return;
+    }
+
+    setDeleteError('');
+    setDeleteLoading(true);
+    const t = deletingTournament;
+    const id = t.id;
 
     try {
+      // 1. Delete all matches for this tournament (by tournamentId or legacy: tournamentType + team match)
+      const matchesQuery = query(collection(db, "matches"), where("tournamentType", "==", t.type));
+      const mSnap = await getDocs(matchesQuery);
+      const toDelete = mSnap.docs.filter(d => {
+        const data = d.data();
+        if (data.tournamentId === id) return true;
+        if (!data.tournamentId) {
+          const homeMatch = t.teams?.some(tm => matchTeamToMatch(tm, data, "home"));
+          const awayMatch = t.teams?.some(tm => matchTeamToMatch(tm, data, "away"));
+          return homeMatch && awayMatch;
+        }
+        return false;
+      });
+      for (let i = 0; i < toDelete.length; i += 500) {
+        const chunk = toDelete.slice(i, i + 500);
+        const batch = writeBatch(db);
+        chunk.forEach(d => batch.delete(d.ref));
+        await batch.commit();
+      }
+
+      // 2. Reduce player career stats (monthlyGoals, monthlyAssists, ovr) if tournament is from current month
+      const currentMonth = new Date().toISOString().slice(0, 7);
+      let tMonth = "";
+      if (t.createdAt) {
+        const tDate = t.createdAt?.toDate ? t.createdAt.toDate() : new Date(t.createdAt);
+        tMonth = tDate.toISOString().slice(0, 7);
+      }
+      if (tMonth === currentMonth && t.teams?.length) {
+        const playerDeltas = {};
+        t.teams.forEach(team => {
+          (team.playerData || []).forEach(pd => {
+            if (!playerDeltas[pd.id]) playerDeltas[pd.id] = { goals: 0, assists: 0 };
+            playerDeltas[pd.id].goals += Number(pd.tournamentGoals) || 0;
+            playerDeltas[pd.id].assists += Number(pd.tournamentAssists) || 0;
+          });
+        });
+        const pIds = Object.keys(playerDeltas);
+        if (pIds.length > 0) {
+          const pSnap = await getDocs(collection(db, "players"));
+          const batch2 = writeBatch(db);
+          pSnap.docs.forEach(d => {
+            const delta = playerDeltas[d.id];
+            if (!delta || (delta.goals === 0 && delta.assists === 0)) return;
+            const data = d.data();
+            const curGoals = Number(data.monthlyGoals) || 0;
+            const curAssists = Number(data.monthlyAssists) || 0;
+            const newGoals = Math.max(0, curGoals - delta.goals);
+            const newAssists = Math.max(0, curAssists - delta.assists);
+            const stats = calculateOvrFromGoalsAssists(newGoals, newAssists);
+            batch2.update(d.ref, {
+              monthlyGoals: newGoals,
+              monthlyAssists: newAssists,
+              ovr: stats.ovr,
+              lastResetMonth: currentMonth
+            });
+          });
+          await batch2.commit();
+        }
+      }
+
+      // 3. Delete the tournament
       await deleteDoc(doc(db, "tournaments", id));
+      closeDeleteModal();
       fetchData();
     } catch (e) {
       console.error("Failed to delete league:", e);
-      alert("Something went wrong while deleting the league. Please try again.");
+      setDeleteError("Something went wrong. Please try again.");
+      setDeleteLoading(false);
     }
   };
 
@@ -225,7 +349,7 @@ export default function MatchDay({ onGoalScored }) {
            <p className="text-xs text-gray-400 font-bold uppercase tracking-widest mt-2">Manage Tournaments & Record Scores</p>
         </div>
         <motion.button 
-          onClick={(e) => openWithClick(() => { setWizardStep(1); setShowCreateModal(true); }, e)} 
+          onClick={(e) => openWithClick(() => { setWizardStep(1); setTeamNameInput(''); setShowCreateModal(true); }, e)} 
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}
           className="w-full sm:w-auto bg-gradient-to-r from-yellow-600 to-yellow-500 px-8 py-4 rounded-2xl font-black uppercase text-xs tracking-widest text-black shadow-[0_0_20px_rgba(234,179,8,0.4)] z-20 flex items-center justify-center gap-2"
@@ -251,13 +375,13 @@ export default function MatchDay({ onGoalScored }) {
                   <motion.button onClick={(e) => openWithClick(() => { setActiveTournament(t); setShowMatchModal(true); }, e)} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} className="flex items-center gap-2 text-[10px] font-black uppercase bg-yellow-500 text-black px-4 py-2.5 rounded-xl shadow-[0_0_10px_rgba(234,179,8,0.3)]">
                     <Sword className="w-3 h-3" /> Play Match
                   </motion.button>
-                  <motion.button onClick={(e) => openWithClick(() => { setEditingTournament(t); setSelectedForTeam([]); setShowEditModal(true); }, e)} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} className="flex items-center gap-2 text-[10px] font-black uppercase bg-white/5 text-gray-300 px-4 py-2.5 rounded-xl border border-white/10 hover:border-yellow-500 hover:text-yellow-500">
+                  <motion.button onClick={(e) => openWithClick(() => { setEditingTournament(t); setSelectedForTeam([]); setTeamNameInput(''); setShowEditModal(true); }, e)} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} className="flex items-center gap-2 text-[10px] font-black uppercase bg-white/5 text-gray-300 px-4 py-2.5 rounded-xl border border-white/10 hover:border-yellow-500 hover:text-yellow-500">
                     <UserPlus className="w-3 h-3" /> Add Team
                   </motion.button>
                   <motion.button 
-                    onClick={() => handleDeleteTournament(t.id)}
+                    onClick={() => openDeleteModal(t)}
                     whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
-                    className="flex items-center gap-2 text-[10px] font-black uppercase bg-red-500/20 text-red-400 px-4 py-2.5 rounded-xl border border-red-500/50 hover:bg-red-500 hover:text-white hover:border-red-500"
+                    className="flex items-center gap-2 text-[10px] font-black uppercase bg-white/5 text-gray-400 px-4 py-2.5 rounded-xl border border-white/10 hover:border-red-500/50 hover:bg-red-500/10 hover:text-red-400 transition-colors"
                     title="Delete league"
                   >
                     <Trash2 className="w-3 h-3" /> Delete
@@ -279,7 +403,17 @@ export default function MatchDay({ onGoalScored }) {
                           </div>
                         ))}
                       </div>
-                      <span className="font-sport text-base sm:text-lg font-semibold text-white tracking-wide truncate drop-shadow-[0_0_8px_rgba(234,179,8,0.3)]">{toTitleCase(team.name || '')}</span>
+                      <span className="group/team truncate drop-shadow-[0_0_8px_rgba(234,179,8,0.3)] cursor-default">
+                        <TeamDisplay team={team} teamNameClass="font-sport text-base sm:text-lg font-bold text-white tracking-wide group-hover/team:text-yellow-500 transition-colors" playersClass="font-sans text-[11px] font-medium text-gray-500 ml-1.5 tracking-wider" />
+                      </span>
+                      <motion.button
+                        onClick={() => openEditTeamName(t, team)}
+                        whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
+                        className="p-1.5 rounded-lg text-gray-500 hover:text-yellow-500 hover:bg-yellow-500/10 transition-colors shrink-0"
+                        title="Edit team name"
+                      >
+                        <Edit2 className="w-3.5 h-3.5" />
+                      </motion.button>
                     </div>
                     <div className="text-xl sm:text-2xl font-black text-yellow-500 italic drop-shadow-md shrink-0">{team.pts} <span className="text-[8px] sm:text-[9px] not-italic text-gray-500 ml-0.5">PTS</span></div>
                   </div>
@@ -320,27 +454,27 @@ export default function MatchDay({ onGoalScored }) {
             const homeNameClasses = `${baseNameClasses} ${isHomeWinner ? 'text-emerald-400' : isAwayWinner ? 'text-red-400' : 'text-white'}`;
             const awayNameClasses = `${baseNameClasses} ${isAwayWinner ? 'text-emerald-400' : isHomeWinner ? 'text-red-400' : 'text-white'}`;
 
-            // Use stored player goals, or derive player names from tournament for older matches
+            // Resolve teams by player IDs (survives renames) or by name (legacy matches)
+            const tournament = tournaments.find(t =>
+              t.type === m.tournamentType &&
+              t.teams?.some(tm => matchTeamToMatch(tm, m, 'home')) &&
+              t.teams?.some(tm => matchTeamToMatch(tm, m, 'away'))
+            );
+            const homeTeamObj = tournament?.teams?.find(tm => matchTeamToMatch(tm, m, 'home')) ?? null;
+            const awayTeamObj = tournament?.teams?.find(tm => matchTeamToMatch(tm, m, 'away')) ?? null;
             let homePlayers = m.homePlayerGoals;
             let awayPlayers = m.awayPlayerGoals;
             if (!homePlayers?.length || !awayPlayers?.length) {
-              const tournament = tournaments.find(t =>
-                t.type === m.tournamentType &&
-                t.teams?.some(tm => tm.name === m.homeTeam) &&
-                t.teams?.some(tm => tm.name === m.awayTeam)
-              );
-              const homeTeam = tournament?.teams?.find(tm => tm.name === m.homeTeam);
-              const awayTeam = tournament?.teams?.find(tm => tm.name === m.awayTeam);
-              if (!homePlayers?.length && homeTeam?.playerData?.length) {
-                homePlayers = homeTeam.playerData.map(p => ({
+              if (!homePlayers?.length && homeTeamObj?.playerData?.length) {
+                homePlayers = homeTeamObj.playerData.map(p => ({
                   name: p.name,
-                  goals: homeTeam.playerData.length === 1 ? homeScore : undefined
+                  goals: homeTeamObj.playerData.length === 1 ? homeScore : undefined
                 }));
               }
-              if (!awayPlayers?.length && awayTeam?.playerData?.length) {
-                awayPlayers = awayTeam.playerData.map(p => ({
+              if (!awayPlayers?.length && awayTeamObj?.playerData?.length) {
+                awayPlayers = awayTeamObj.playerData.map(p => ({
                   name: p.name,
-                  goals: awayTeam.playerData.length === 1 ? awayScore : undefined
+                  goals: awayTeamObj.playerData.length === 1 ? awayScore : undefined
                 }));
               }
             }
@@ -354,9 +488,9 @@ export default function MatchDay({ onGoalScored }) {
                   className="absolute -right-2 -bottom-2 w-16 h-16 sm:w-20 sm:h-20 object-contain opacity-[0.02] group-hover:opacity-[0.08] transition-opacity pointer-events-none" 
                 />
                 <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full sm:w-auto relative z-10 flex-1">
-                  <div className="flex flex-col items-center sm:items-start gap-1 min-w-0">
-                    <span className={homeNameClasses}>
-                      {toTitleCase(m.homeTeam || '')}
+                  <div className="flex flex-col items-center sm:items-start gap-1 min-w-0 group/team">
+                    <span className={`${homeNameClasses} group-hover/team:text-yellow-500 transition-colors cursor-default`}>
+                      {formatMatchHistoryTeam(homeTeamObj, m.homeTeam)}
                     </span>
                     {homePlayers.length > 0 && (
                       <div className="flex flex-wrap gap-x-3 gap-y-0.5 justify-center sm:justify-start text-[9px] sm:text-[10px]">
@@ -382,9 +516,9 @@ export default function MatchDay({ onGoalScored }) {
                     </span>
                     <div className="w-8 sm:w-4 h-[1px] bg-white/10 sm:hidden" />
                   </div>
-                  <div className="flex flex-col items-center sm:items-end gap-1 min-w-0">
-                    <span className={awayNameClasses}>
-                      {toTitleCase(m.awayTeam || '')}
+                  <div className="flex flex-col items-center sm:items-end gap-1 min-w-0 group/team">
+                    <span className={`${awayNameClasses} group-hover/team:text-yellow-500 transition-colors cursor-default`}>
+                      {formatMatchHistoryTeam(awayTeamObj, m.awayTeam)}
                     </span>
                     {awayPlayers.length > 0 && (
                       <div className="flex flex-wrap gap-x-3 gap-y-0.5 justify-center sm:justify-end text-[9px] sm:text-[10px]">
@@ -439,7 +573,7 @@ export default function MatchDay({ onGoalScored }) {
                   transition={{ type: "spring", stiffness: 350, damping: 28 }}
                   className="bg-[#0a0a0c] border border-yellow-500/30 w-full max-w-2xl p-6 sm:p-10 rounded-[30px] sm:rounded-[40px] shadow-[0_0_50px_rgba(234,179,8,0.15)] relative max-h-[90vh] overflow-y-auto custom-scrollbar"
                 >
-                  <button onClick={() => setShowCreateModal(false)} className="absolute top-6 right-6 sm:top-8 sm:right-8 text-gray-500 hover:text-white transition-colors"><X /></button>
+                  <button onClick={() => { setShowCreateModal(false); setTeamNameInput(''); }} className="absolute top-6 right-6 sm:top-8 sm:right-8 text-gray-500 hover:text-white transition-colors"><X /></button>
                   <div className="mb-8 sm:mb-12 text-center mt-4 sm:mt-0">
                     <p className="text-yellow-500 text-[10px] font-black tracking-widest uppercase mb-1 sm:mb-2">Tournament Builder</p>
                     <h2 className="text-3xl sm:text-4xl font-black italic uppercase tracking-tighter text-white drop-shadow-md">
@@ -489,6 +623,18 @@ export default function MatchDay({ onGoalScored }) {
                           );
                         })}
                       </div>
+                      {selectedForTeam.length >= (newTournament.format === '2v2' ? 2 : 1) && (
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-black uppercase tracking-widest text-yellow-500">Team Name <span className="text-gray-500 font-normal normal-case">(optional)</span></label>
+                          <input
+                            type="text"
+                            value={teamNameInput}
+                            onChange={(e) => setTeamNameInput(e.target.value)}
+                            placeholder={selectedForTeam.map(p => toTitleCase(p?.name || '')).join(' & ')}
+                            className="w-full bg-black border border-white/10 rounded-xl px-4 py-3 text-white font-sport font-semibold placeholder:text-gray-600 focus:border-yellow-500 focus:outline-none transition-colors"
+                          />
+                        </div>
+                      )}
                       <div className="flex flex-col gap-3 sm:gap-4">
                         <motion.button disabled={selectedForTeam.length < (newTournament.format === '2v2' ? 2 : 1)} onClick={addTeamToTournament} whileHover={{ scale: selectedForTeam.length >= (newTournament.format === '2v2' ? 2 : 1) ? 1.02 : 1 }} whileTap={{ scale: 0.98 }} className="w-full py-4 sm:py-5 bg-black border border-white/10 rounded-[20px] font-black text-[10px] sm:text-xs uppercase tracking-widest text-white hover:bg-yellow-500/10 hover:border-yellow-500 hover:text-yellow-500 disabled:opacity-30">
                           Lock Team ({newTournament.teams.length} Added)
@@ -539,7 +685,18 @@ export default function MatchDay({ onGoalScored }) {
                         );
                       })}
                     </div>
-                    
+                    {selectedForTeam.length >= (editingTournament.format === '2v2' ? 2 : 1) && (
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-yellow-500">Team Name <span className="text-gray-500 font-normal normal-case">(optional)</span></label>
+                        <input
+                          type="text"
+                          value={teamNameInput}
+                          onChange={(e) => setTeamNameInput(e.target.value)}
+                          placeholder={selectedForTeam.map(p => toTitleCase(p?.name || '')).join(' & ')}
+                          className="w-full bg-black border border-white/10 rounded-xl px-4 py-3 text-white font-sport font-semibold placeholder:text-gray-600 focus:border-yellow-500 focus:outline-none transition-colors"
+                        />
+                      </div>
+                    )}
                     <motion.button disabled={selectedForTeam.length < (editingTournament.format === '2v2' ? 2 : 1)} onClick={handleAddTeamToExisting} whileHover={{ scale: selectedForTeam.length >= (editingTournament.format === '2v2' ? 2 : 1) ? 1.02 : 1 }} whileTap={{ scale: 0.98 }} className="w-full py-5 sm:py-6 bg-gradient-to-r from-yellow-600 to-yellow-500 text-black rounded-[20px] font-black uppercase tracking-[0.2em] sm:tracking-[0.3em] text-xs sm:text-sm shadow-[0_0_20px_rgba(234,179,8,0.4)] flex items-center justify-center gap-3 disabled:opacity-50 disabled:grayscale">
                       <UserPlus className="w-4 h-4 sm:w-5 sm:h-5" /> Add Team to League
                     </motion.button>
@@ -569,16 +726,16 @@ export default function MatchDay({ onGoalScored }) {
                   <div className="space-y-6 sm:space-y-8">
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                       <AnimatedDropdown
-                        options={activeTournament.teams.map(team => ({ value: team.name, label: toTitleCase(team.name || ''), raw: team }))}
-                        value={matchData.homeTeam ? { value: matchData.homeTeam.name, label: toTitleCase(matchData.homeTeam.name || ''), raw: matchData.homeTeam } : null}
+                        options={activeTournament.teams.map(team => ({ value: team.name, label: formatTeamDisplay(team), raw: team }))}
+                        value={matchData.homeTeam ? { value: matchData.homeTeam.name, label: formatTeamDisplay(matchData.homeTeam), raw: matchData.homeTeam } : null}
                         onChange={(opt) => setMatchData({...matchData, homeTeam: opt.raw})}
                         placeholder="Select Home Side"
                         isDisabled={(opt) => matchData.awayTeam?.name === opt.raw?.name}
                         isDark={true}
                       />
                       <AnimatedDropdown
-                        options={activeTournament.teams.map(team => ({ value: team.name, label: toTitleCase(team.name || ''), raw: team }))}
-                        value={matchData.awayTeam ? { value: matchData.awayTeam.name, label: toTitleCase(matchData.awayTeam.name || ''), raw: matchData.awayTeam } : null}
+                        options={activeTournament.teams.map(team => ({ value: team.name, label: formatTeamDisplay(team), raw: team }))}
+                        value={matchData.awayTeam ? { value: matchData.awayTeam.name, label: formatTeamDisplay(matchData.awayTeam), raw: matchData.awayTeam } : null}
                         onChange={(opt) => setMatchData({...matchData, awayTeam: opt.raw})}
                         placeholder="Select Away Side"
                         isDisabled={(opt) => matchData.homeTeam?.name === opt.raw?.name}
@@ -610,7 +767,9 @@ export default function MatchDay({ onGoalScored }) {
                           {[matchData.homeTeam, matchData.awayTeam].map((team, tIdx) => (
                             team && (
                               <div key={tIdx} className="space-y-3 sm:space-y-4 bg-black/40 p-4 sm:p-5 rounded-2xl border border-white/5">
-                                <p className="font-sport text-base sm:text-lg font-semibold text-white border-b border-white/10 pb-2 mb-3 sm:mb-4 tracking-wide">{toTitleCase(team.name || '')}</p>
+                                <p className="border-b border-white/10 pb-2 mb-3 sm:mb-4 tracking-wide">
+                      <TeamDisplay team={team} teamNameClass="font-sport text-base sm:text-lg font-bold text-white" playersClass="font-sans text-[11px] font-medium text-gray-500 ml-1.5" />
+                    </p>
                                 {team.playerData?.map(p => (
                                   <div key={p.id} className="flex items-center justify-between gap-3">
                                     <span className="font-sport text-sm font-semibold text-gray-300 truncate flex-1">{toTitleCase(p?.name || '').split(' ')[0]}</span>
@@ -644,6 +803,129 @@ export default function MatchDay({ onGoalScored }) {
                     >
                       Submit Match Result
                     </motion.button>
+                  </div>
+                </motion.div>
+              </div>
+            )}
+          </AnimatePresence>
+
+          {/* DELETE LEAGUE MODAL */}
+          <AnimatePresence>
+            {deletingTournament && (
+              <div className="fixed inset-0 flex items-center justify-center bg-black/90 backdrop-blur-md p-4">
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  transition={{ type: "spring", stiffness: 350, damping: 28 }}
+                  className="bg-[#0a0a0c] border border-yellow-500/30 w-full max-w-md p-6 sm:p-8 rounded-[24px] sm:rounded-[30px] shadow-[0_0_50px_rgba(234,179,8,0.15)] relative"
+                >
+                  <button
+                    onClick={closeDeleteModal}
+                    disabled={deleteLoading}
+                    className="absolute top-4 right-4 sm:top-5 sm:right-5 text-gray-500 hover:text-white transition-colors disabled:opacity-50"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                  <div className="mb-6">
+                    <p className="text-yellow-500 text-[10px] font-black tracking-widest uppercase mb-1">Delete League</p>
+                    <h2 className="text-xl sm:text-2xl font-black italic uppercase tracking-tighter text-white drop-shadow-md">
+                      Permanently Delete?
+                    </h2>
+                  </div>
+                  <p className="text-sm text-gray-400 mb-6">
+                    Deleting <span className="text-yellow-500 font-semibold">{deletingTournament.type?.replace(/^e/, '')}</span> will remove all matches and related stats. This cannot be undone.
+                  </p>
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-yellow-500">Admin Password</label>
+                      <input
+                        type="password"
+                        value={deletePassword}
+                        onChange={(e) => { setDeletePassword(e.target.value); setDeleteError(''); }}
+                        placeholder="Enter password to confirm"
+                        disabled={deleteLoading}
+                        className="w-full bg-black border border-white/10 rounded-xl px-4 py-3 text-white font-sport font-semibold placeholder:text-gray-600 focus:border-yellow-500 focus:outline-none transition-colors disabled:opacity-50"
+                        autoFocus
+                      />
+                    </div>
+                    {deleteError && <p className="text-sm text-red-400">{deleteError}</p>}
+                    <div className="flex gap-3 pt-2">
+                      <motion.button
+                        onClick={closeDeleteModal}
+                        disabled={deleteLoading}
+                        whileHover={{ scale: deleteLoading ? 1 : 1.02 }} whileTap={{ scale: 0.98 }}
+                        className="flex-1 py-3 rounded-xl font-black text-[10px] sm:text-xs uppercase tracking-widest bg-white/5 text-gray-400 border border-white/10 hover:border-white/20 hover:text-white transition-colors disabled:opacity-50"
+                      >
+                        Cancel
+                      </motion.button>
+                      <motion.button
+                        onClick={executeDeleteTournament}
+                        disabled={deleteLoading || !deletePassword?.trim()}
+                        whileHover={{ scale: deleteLoading || !deletePassword?.trim() ? 1 : 1.02 }} whileTap={{ scale: 0.98 }}
+                        className="flex-1 py-3 rounded-xl font-black text-[10px] sm:text-xs uppercase tracking-widest bg-red-500/20 text-red-400 border border-red-500/50 hover:bg-red-500/30 hover:border-red-500 hover:text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                      >
+                        {deleteLoading ? <><Loader2 className="w-4 h-4 animate-spin" /> Deleting...</> : <>Delete League</>}
+                      </motion.button>
+                    </div>
+                  </div>
+                </motion.div>
+              </div>
+            )}
+          </AnimatePresence>
+
+          {/* EDIT TEAM NAME MODAL */}
+          <AnimatePresence>
+            {editingTeamName && (
+              <div className="fixed inset-0 flex items-center justify-center bg-black/90 backdrop-blur-md p-4">
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  transition={{ type: "spring", stiffness: 350, damping: 28 }}
+                  className="bg-[#0a0a0c] border border-yellow-500/30 w-full max-w-md p-6 sm:p-8 rounded-[24px] sm:rounded-[30px] shadow-[0_0_50px_rgba(234,179,8,0.15)] relative"
+                >
+                  <button
+                    onClick={() => { setEditingTeamName(null); setEditTeamNameInput(''); }}
+                    className="absolute top-4 right-4 sm:top-5 sm:right-5 text-gray-500 hover:text-white transition-colors"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                  <div className="mb-6">
+                    <p className="text-yellow-500 text-[10px] font-black tracking-widest uppercase mb-1">Rename Team</p>
+                    <h2 className="text-xl sm:text-2xl font-black italic uppercase tracking-tighter text-white drop-shadow-md">
+                      Edit Team Name
+                    </h2>
+                  </div>
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-yellow-500">Team Name</label>
+                      <input
+                        type="text"
+                        value={editTeamNameInput}
+                        onChange={(e) => setEditTeamNameInput(e.target.value)}
+                        placeholder="Enter team name"
+                        className="w-full bg-black border border-white/10 rounded-xl px-4 py-3 text-white font-sport font-semibold placeholder:text-gray-600 focus:border-yellow-500 focus:outline-none transition-colors"
+                        autoFocus
+                      />
+                    </div>
+                    <div className="flex gap-3 pt-2">
+                      <motion.button
+                        onClick={() => { setEditingTeamName(null); setEditTeamNameInput(''); }}
+                        whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
+                        className="flex-1 py-3 rounded-xl font-black text-[10px] sm:text-xs uppercase tracking-widest bg-white/5 text-gray-400 border border-white/10 hover:border-white/20 hover:text-white transition-colors"
+                      >
+                        Cancel
+                      </motion.button>
+                      <motion.button
+                        onClick={saveEditTeamName}
+                        disabled={!editTeamNameInput?.trim()}
+                        whileHover={{ scale: editTeamNameInput?.trim() ? 1.02 : 1 }} whileTap={{ scale: 0.98 }}
+                        className="flex-1 py-3 rounded-xl font-black text-[10px] sm:text-xs uppercase tracking-widest bg-gradient-to-r from-yellow-600 to-yellow-500 text-black shadow-[0_0_20px_rgba(234,179,8,0.3)] disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        Save
+                      </motion.button>
+                    </div>
                   </div>
                 </motion.div>
               </div>

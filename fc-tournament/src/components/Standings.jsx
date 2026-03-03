@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Trophy, Crown, TrendingUp, Loader2, Goal, Medal, Flame, Users, User, Sparkles, Activity } from 'lucide-react';
 import { db } from '../firebase';
-import { toTitleCase } from '../lib/utils';
+import { toTitleCase, matchTeamToMatch } from '../lib/utils';
+import { TeamDisplay } from './TeamDisplay';
 import { PlayerCareerCard } from './ui/player-career-card';
 import { collection, getDocs, query, orderBy } from 'firebase/firestore';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -64,20 +65,15 @@ export default function Standings() {
 
           if (data.teams) {
             data.teams.forEach(team => {
-              const teamName = team.name || '';
-              
-              const teamMatches = matchHistory.filter(m => {
-                const home = m.homeTeam || '';
-                const away = m.awayTeam || '';
-                return m.tournamentType === type && (home.trim() === teamName.trim() || away.trim() === teamName.trim());
-              });
+              const teamMatches = matchHistory.filter(m =>
+                m.tournamentType === type && (matchTeamToMatch(team, m, 'home') || matchTeamToMatch(team, m, 'away'))
+              );
 
               let w = 0, d = 0, l = 0, gs = 0, gc = 0, form = [];
               const sortedMatches = [...teamMatches].sort((a, b) => getSafeTime(b.createdAt) - getSafeTime(a.createdAt));
 
               sortedMatches.forEach((m, idx) => {
-                const home = m.homeTeam || '';
-                const isHome = home.trim() === teamName.trim();
+                const isHome = matchTeamToMatch(team, m, 'home');
                 const tS = isHome ? (Number(m.homeScore) || 0) : (Number(m.awayScore) || 0);
                 const oS = isHome ? (Number(m.awayScore) || 0) : (Number(m.homeScore) || 0);
                 
@@ -207,8 +203,10 @@ export default function Standings() {
                         {leagueData.map((team, i) => (
                           <tr key={i} className="hover:bg-white/5 transition-colors group">
                             <td className="px-2 sm:px-3 py-2 sm:py-2.5 text-center font-black text-gray-600 text-xs">{i + 1}</td>
-                            <td className="px-1.5 sm:px-2 py-2 sm:py-2.5 font-sport font-semibold text-base sm:text-lg tracking-wide group-hover:text-transparent group-hover:bg-clip-text group-hover:bg-gradient-to-r group-hover:from-neonBlue group-hover:to-[#00ff88] transition-all">
-                              {formatTeamName(team.name)}
+                            <td className="px-1.5 sm:px-2 py-2 sm:py-2.5 font-sport font-semibold text-base sm:text-lg tracking-wide">
+                              <span className="group/team cursor-default inline-block">
+                                <TeamDisplay team={team} teamNameClass="font-sport font-bold text-white group-hover/team:text-transparent group-hover/team:bg-clip-text group-hover/team:bg-gradient-to-r group-hover/team:from-neonBlue group-hover/team:to-[#00ff88] transition-all" playersClass="font-sans text-[11px] font-medium text-gray-500 ml-1.5" />
+                              </span>
                             </td>
                             <td className="px-1.5 sm:px-2 py-2 sm:py-2.5 text-center text-gray-400 font-bold text-xs">{team.mp}</td>
                             <td className="px-1.5 sm:px-2 py-2 sm:py-2.5 text-center text-[#00ff88] font-bold text-xs">{team.w}</td>
