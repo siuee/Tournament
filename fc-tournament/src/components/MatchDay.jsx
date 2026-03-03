@@ -123,12 +123,22 @@ export default function MatchDay({ onGoalScored }) {
       return teamCopy;
     });
 
+    const homePlayerGoals = matchData.homeTeam.playerData?.map(p => ({
+      name: p.name,
+      goals: activeTournament.format === '1v1' ? homeS : (parseInt(matchData.playerGoals[p.id]) || 0)
+    })) ?? [];
+    const awayPlayerGoals = matchData.awayTeam.playerData?.map(p => ({
+      name: p.name,
+      goals: activeTournament.format === '1v1' ? awayS : (parseInt(matchData.playerGoals[p.id]) || 0)
+    })) ?? [];
+
     try {
       await updateDoc(doc(db, "tournaments", activeTournament.id), { teams: updatedTeams });
       await addDoc(collection(db, "matches"), {
         tournamentType: activeTournament.type,
         homeTeam: matchData.homeTeam.name, awayTeam: matchData.awayTeam.name,
         homeScore: homeS, awayScore: awayS,
+        homePlayerGoals, awayPlayerGoals,
         createdAt: new Date()
       });
       setShowMatchModal(false);
@@ -310,26 +320,89 @@ export default function MatchDay({ onGoalScored }) {
             const homeNameClasses = `${baseNameClasses} ${isHomeWinner ? 'text-emerald-400' : isAwayWinner ? 'text-red-400' : 'text-white'}`;
             const awayNameClasses = `${baseNameClasses} ${isAwayWinner ? 'text-emerald-400' : isHomeWinner ? 'text-red-400' : 'text-white'}`;
 
+            // Use stored player goals, or derive player names from tournament for older matches
+            let homePlayers = m.homePlayerGoals;
+            let awayPlayers = m.awayPlayerGoals;
+            if (!homePlayers?.length || !awayPlayers?.length) {
+              const tournament = tournaments.find(t =>
+                t.type === m.tournamentType &&
+                t.teams?.some(tm => tm.name === m.homeTeam) &&
+                t.teams?.some(tm => tm.name === m.awayTeam)
+              );
+              const homeTeam = tournament?.teams?.find(tm => tm.name === m.homeTeam);
+              const awayTeam = tournament?.teams?.find(tm => tm.name === m.awayTeam);
+              if (!homePlayers?.length && homeTeam?.playerData?.length) {
+                homePlayers = homeTeam.playerData.map(p => ({
+                  name: p.name,
+                  goals: homeTeam.playerData.length === 1 ? homeScore : undefined
+                }));
+              }
+              if (!awayPlayers?.length && awayTeam?.playerData?.length) {
+                awayPlayers = awayTeam.playerData.map(p => ({
+                  name: p.name,
+                  goals: awayTeam.playerData.length === 1 ? awayScore : undefined
+                }));
+              }
+            }
+            if (!homePlayers?.length) homePlayers = [];
+            if (!awayPlayers?.length) awayPlayers = [];
+
             return (
               <div key={m.id} className="bg-black p-5 sm:p-6 rounded-3xl border border-white/5 flex flex-col sm:flex-row items-center justify-between gap-4 hover:border-yellow-500/40 transition-all group relative overflow-hidden">
                 <img 
                   src={leagues.find(l => l.name === m.tournamentType)?.logo} 
                   className="absolute -right-2 -bottom-2 w-16 h-16 sm:w-20 sm:h-20 object-contain opacity-[0.02] group-hover:opacity-[0.08] transition-opacity pointer-events-none" 
                 />
-                <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto relative z-10">
-                  <span className={homeNameClasses}>
-                    {toTitleCase(m.homeTeam || '')}
-                  </span>
-                  <div className="flex items-center gap-2">
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full sm:w-auto relative z-10 flex-1">
+                  <div className="flex flex-col items-center sm:items-start gap-1 min-w-0">
+                    <span className={homeNameClasses}>
+                      {toTitleCase(m.homeTeam || '')}
+                    </span>
+                    {homePlayers.length > 0 && (
+                      <div className="flex flex-wrap gap-x-3 gap-y-0.5 justify-center sm:justify-start text-[9px] sm:text-[10px]">
+                        {homePlayers.map((p, i) => (
+                          <span key={i} className="inline-flex items-center gap-1 text-gray-400 font-semibold tracking-wide">
+                            <span className="text-yellow-500/90">{toTitleCase(p.name?.split(' ')[0] || '')}</span>
+                            {p.goals != null && (
+                              <>
+                                <span className="text-yellow-500/70">×</span>
+                                <Goal className="w-2.5 h-2.5 text-yellow-500/80 shrink-0" />
+                                <span className="text-yellow-400 font-black">{p.goals}</span>
+                              </>
+                            )}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
                     <div className="w-8 sm:w-4 h-[1px] bg-white/10 sm:hidden" />
                     <span className="text-[8px] sm:text-[9px] font-black italic tracking-widest text-yellow-500 px-2.5 py-1 bg-yellow-500/10 rounded-md border border-yellow-500/20">
                       VS
                     </span>
                     <div className="w-8 sm:w-4 h-[1px] bg-white/10 sm:hidden" />
                   </div>
-                  <span className={awayNameClasses}>
-                    {toTitleCase(m.awayTeam || '')}
-                  </span>
+                  <div className="flex flex-col items-center sm:items-end gap-1 min-w-0">
+                    <span className={awayNameClasses}>
+                      {toTitleCase(m.awayTeam || '')}
+                    </span>
+                    {awayPlayers.length > 0 && (
+                      <div className="flex flex-wrap gap-x-3 gap-y-0.5 justify-center sm:justify-end text-[9px] sm:text-[10px]">
+                        {awayPlayers.map((p, i) => (
+                          <span key={i} className="inline-flex items-center gap-1 text-gray-400 font-semibold tracking-wide">
+                            <span className="text-yellow-500/90">{toTitleCase(p.name?.split(' ')[0] || '')}</span>
+                            {p.goals != null && (
+                              <>
+                                <span className="text-yellow-500/70">×</span>
+                                <Goal className="w-2.5 h-2.5 text-yellow-500/80 shrink-0" />
+                                <span className="text-yellow-400 font-black">{p.goals}</span>
+                              </>
+                            )}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
                 <div className="flex flex-col items-center relative z-10 w-full sm:w-auto">
                   <div className="w-full sm:w-auto text-center bg-[#121212] px-6 py-2.5 sm:py-3 rounded-2xl border border-white/10 shadow-xl min-w-[110px] group-hover:border-yellow-500/50 transition-colors">
