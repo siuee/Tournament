@@ -1,12 +1,26 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, lazy, Suspense } from 'react';
 import { Trophy, Shield, Gamepad2, Sun, Moon, Activity, Droplets, Flame, Sparkles, Leaf } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-
 import LockerRoom from './components/LockerRoom';
 import Standings from './components/Standings'; 
 import MatchDay from './components/MatchDay';
 import { AnimatedSocialIcons } from './components/ui/floating-action-button';
-import { StarShockwaves } from './components/ui/star-shockwaves'; 
+
+const StarShockwaves = lazy(() => import('./components/ui/star-shockwaves').then(m => ({ default: m.StarShockwaves })));
+
+// Mobile: lightweight gradient (no Three.js). Desktop: full particle background.
+const StarShockwavesLite = () => {
+  const [isDesktop, setIsDesktop] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 769px)');
+    setIsDesktop(mq.matches);
+    const fn = () => setIsDesktop(mq.matches);
+    mq.addEventListener('change', fn);
+    return () => mq.removeEventListener('change', fn);
+  }, []);
+  if (!isDesktop) return <div className="fixed inset-0 z-[-10] bg-gradient-to-b from-[#0a0505] via-[#1a0a05] to-[#050505]" />;
+  return <Suspense fallback={<div className="fixed inset-0 z-[-10] bg-gradient-to-b from-[#0a0505] via-[#1a0a05] to-[#050505]" />}><StarShockwaves /></Suspense>;
+};
 
 // --- BRANDING SVG ---
 const BananaIcon = ({ className }) => (
@@ -70,8 +84,7 @@ const RealisticGlassShatter = () => {
 
 function App() {
   const [activeTab, setActiveTab] = useState('standings');
-  const [belloMode, setBelloMode] = useState(false); 
-  
+
   // --- EASTER EGG STATES ---
   const [isSmashMode, setIsSmashMode] = useState(false);
   const [cracks, setCracks] = useState([]);
@@ -128,26 +141,23 @@ function App() {
   };
 
   const dynamicStyles = useMemo(() => {
-    return belloMode ? `
-      body { background-color: #fffbeb; color: #1e293b; transition: background-color 0.5s ease; overflow: ${screenFallen ? 'hidden' : 'auto'}; }
-      ::-webkit-scrollbar-thumb { background: #fbbf24; }
-    ` : `
+    return `
       body { background-color: #050505; color: white; transition: background-color 0.5s ease; overflow: ${screenFallen ? 'hidden' : 'auto'}; }
       ::-webkit-scrollbar-thumb { background: rgba(234, 179, 8, 0.3); }
     `;
-  }, [belloMode, screenFallen]);
+  }, [screenFallen]);
 
   return (
     <div className="min-h-screen relative font-sans overflow-x-hidden">
       {/* Dynamic Background - solid base, behind particles */}
       <motion.div 
-        animate={{ backgroundColor: belloMode ? '#fffbeb' : '#050505' }}
+        animate={{ backgroundColor: '#050505' }}
         className="fixed inset-0 z-[-20]"
         style={{ transition: 'background-color 0.6s ease' }}
       />
-      {/* StarShockwaves - persistent particle animation, smooth navigation */}
+      {/* StarShockwaves on desktop; lightweight gradient on mobile for fast load */}
       <div className="fixed inset-0 z-[-10]">
-        <StarShockwaves />
+        <StarShockwavesLite />
       </div>
 
       {/* --- THE FALLING STAGE --- */}
@@ -161,29 +171,20 @@ function App() {
         <nav className="hidden md:flex fixed top-6 left-1/2 -translate-x-1/2 z-[100] w-full max-w-5xl px-4">
           <motion.div 
             initial={{ y: -100 }} animate={{ y: 0 }}
-            className={`w-full ${belloMode ? 'bg-white/90 border-yellow-200' : 'bg-[#0a0a0c]/80 border-white/10'} backdrop-blur-xl border rounded-full p-2 flex justify-between items-center shadow-[0_20px_50px_rgba(0,0,0,0.3)] transition-all duration-500`}
+            className="w-full bg-[#0a0a0c]/80 border-white/10 backdrop-blur-xl border rounded-full p-2 flex justify-between items-center shadow-[0_20px_50px_rgba(0,0,0,0.3)] transition-all duration-500"
           >
             <div className="flex items-center gap-3 pl-4 pr-6 border-r border-white/10">
               <div className="text-yellow-500 drop-shadow-[0_0_10px_rgba(234,179,8,0.5)]"><BananaIcon className="w-8 h-8" /></div>
               <div className="flex flex-col">
-                <h1 className={`text-xl font-black italic tracking-tighter uppercase leading-none ${belloMode ? 'text-slate-900' : 'text-white'}`}>Banana <span className="text-yellow-500">FC</span></h1>
+                <h1 className="text-xl font-black italic tracking-tighter uppercase leading-none text-white">Banana <span className="text-yellow-500">FC</span></h1>
                 <span className="text-[7px] font-black tracking-[0.3em] text-gray-500 uppercase">Tournament Hub</span>
               </div>
             </div>
             
             <div className="flex gap-2">
-              <NavBtn icon={<Activity size={16}/>} label="Standings" active={activeTab === 'standings'} onClick={() => setActiveTab('standings')} bello={belloMode} />
-              <NavBtn icon={<Gamepad2 size={16}/>} label="Match Day" active={activeTab === 'match'} onClick={() => setActiveTab('match')} bello={belloMode} />
-              <NavBtn icon={<Shield size={16}/>} label="Club" active={activeTab === 'locker'} onClick={() => setActiveTab('locker')} bello={belloMode} />
-            </div>
-
-            <div className="pl-4 pr-2 border-l border-white/10">
-              <motion.button 
-                whileTap={{ scale: 0.8 }} onClick={() => setBelloMode(!belloMode)} 
-                className={`p-2.5 rounded-full transition-all ${belloMode ? 'bg-slate-900 text-yellow-400' : 'bg-white text-slate-900 shadow-[0_0_15px_rgba(255,255,255,0.3)]'}`}
-              >
-                {belloMode ? <Moon size={18}/> : <Sun size={18}/>}
-              </motion.button>
+              <NavBtn icon={<Activity size={16}/>} label="Standings" active={activeTab === 'standings'} onClick={() => setActiveTab('standings')} />
+              <NavBtn icon={<Gamepad2 size={16}/>} label="Match Day" active={activeTab === 'match'} onClick={() => setActiveTab('match')} />
+              <NavBtn icon={<Shield size={16}/>} label="Club" active={activeTab === 'locker'} onClick={() => setActiveTab('locker')} />
             </div>
           </motion.div>
         </nav>
@@ -199,25 +200,27 @@ function App() {
               transition={{ duration: 0.2, ease: "easeOut" }}
               className="max-w-7xl mx-auto"
             >
-              {activeTab === 'standings' && <Standings belloMode={belloMode} />}
-              {activeTab === 'match' && <MatchDay belloMode={belloMode} />}
-              {activeTab === 'locker' && <LockerRoom belloMode={belloMode} />}
+              {activeTab === 'standings' && <Standings />}
+              {activeTab === 'match' && <MatchDay />}
+              {activeTab === 'locker' && <LockerRoom />}
             </motion.div>
           </AnimatePresence>
         </main>
 
-        {/* Global StarShockwaves controls (theme + animate on/off) */}
-        <ShockwaveControls />
+        {/* Theme controls - desktop only (background is gradient on mobile) */}
+        <div className="hidden md:block">
+          <ShockwaveControls />
+        </div>
 
         {/* --- MOBILE CONSOLE TAB BAR --- */}
         <nav className="md:hidden fixed bottom-6 left-4 right-4 z-[100]">
           <motion.div 
             initial={{ y: 100 }} animate={{ y: 0 }}
-            className={`flex justify-around items-center p-3 rounded-[35px] border backdrop-blur-2xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] transition-all duration-500 ${belloMode ? 'bg-white/95 border-yellow-200' : 'bg-[#0a0a0c]/90 border-white/10'}`}
+            className="flex justify-around items-center p-3 rounded-[35px] border backdrop-blur-2xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] transition-all duration-500 bg-[#0a0a0c]/90 border-white/10"
           >
-            <MobTab icon={<Activity />} label="RANK" active={activeTab === 'standings'} onClick={() => setActiveTab('standings')} bello={belloMode} />
-            <MobTab icon={<Gamepad2 />} label="PLAY" active={activeTab === 'match'} onClick={() => setActiveTab('match')} bello={belloMode} />
-            <MobTab icon={<Shield />} label="CLUB" active={activeTab === 'locker'} onClick={() => setActiveTab('locker')} bello={belloMode} />
+            <MobTab icon={<Activity />} label="RANK" active={activeTab === 'standings'} onClick={() => setActiveTab('standings')} />
+            <MobTab icon={<Gamepad2 />} label="PLAY" active={activeTab === 'match'} onClick={() => setActiveTab('match')} />
+            <MobTab icon={<Shield />} label="CLUB" active={activeTab === 'locker'} onClick={() => setActiveTab('locker')} />
           </motion.div>
         </nav>
 
@@ -294,20 +297,20 @@ function App() {
 }
 
 // STYLIZED DESKTOP BUTTON
-const NavBtn = ({ icon, label, active, onClick, bello }) => (
-  <button onClick={onClick} className={`group px-6 py-2.5 rounded-full font-black uppercase tracking-widest text-[10px] transition-all flex items-center gap-2 active:scale-95 ${active ? 'bg-yellow-500 text-black shadow-[0_10px_20px_rgba(234,179,8,0.3)] scale-105' : bello ? 'text-slate-500 hover:text-black hover:bg-yellow-100' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}>
+const NavBtn = ({ icon, label, active, onClick }) => (
+  <button onClick={onClick} className={`group px-6 py-2.5 rounded-full font-black uppercase tracking-widest text-[10px] transition-all flex items-center gap-2 active:scale-95 ${active ? 'bg-yellow-500 text-black shadow-[0_10px_20px_rgba(234,179,8,0.3)] scale-105' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}>
     <motion.span animate={active ? { scale: [1, 1.2, 1] } : {}}>{icon}</motion.span>
     <span>{label}</span>
   </button>
 );
 
 // STYLIZED MOBILE TAB
-const MobTab = ({ icon, label, active, onClick, bello }) => (
+const MobTab = ({ icon, label, active, onClick }) => (
   <button onClick={onClick} className="flex flex-col items-center justify-center relative px-6 py-2">
-    <div className={`p-3.5 rounded-2xl transition-all duration-500 ${active ? 'bg-yellow-500 text-black shadow-xl rotate-[10deg] scale-110' : bello ? 'bg-yellow-50 text-yellow-600' : 'bg-white/5 text-gray-600'}`}>
+    <div className={`p-3.5 rounded-2xl transition-all duration-500 ${active ? 'bg-yellow-500 text-black shadow-xl rotate-[10deg] scale-110' : 'bg-white/5 text-gray-600'}`}>
       {icon}
     </div>
-    <span className={`text-[8px] font-black uppercase mt-2 tracking-[0.2em] transition-all ${active ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'} ${bello ? 'text-slate-900' : 'text-white'}`}>
+    <span className={`text-[8px] font-black uppercase mt-2 tracking-[0.2em] transition-all ${active ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'} text-white`}>
       {label}
     </span>
   </button>

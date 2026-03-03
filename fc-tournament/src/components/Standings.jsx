@@ -17,7 +17,7 @@ export default function Standings() {
     'eLaLiga': '/assets/leagues/laliga.png',
     'eSerie A': '/assets/leagues/seriea.png',
     'eLigue 1': '/assets/leagues/ligue1.png',
-    'eInternational': '/assets/leagues/intl.jpg',
+    'eInternational': '/assets/leagues/nepal.png',
     'eChampions League': '/assets/leagues/ucl.png'
   };
 
@@ -297,7 +297,7 @@ export default function Standings() {
                   <div className="flex items-center gap-4 relative z-10">
                     <div className="relative">
                       <div className="w-14 h-14 rounded-full border-2 border-neonGold overflow-hidden bg-black shadow-[0_0_15px_rgba(234,179,8,0.3)]">
-                        {activeGBPlayers[0].videoUrl ? <video src={activeGBPlayers[0].videoUrl} autoPlay loop muted playsInline className="w-full h-full object-cover" /> : <div className="w-full h-full bg-gray-900" />}
+                        {activeGBPlayers[0].videoUrl ? <video src={activeGBPlayers[0].videoUrl} autoPlay loop muted playsInline preload="metadata" className="w-full h-full object-cover" /> : <div className="w-full h-full bg-gray-900" />}
                       </div>
                       <div className="absolute -bottom-2 -right-2 bg-neonGold text-black text-[10px] font-black px-1.5 py-0.5 rounded border border-[#121212]">#1</div>
                     </div>
@@ -320,7 +320,7 @@ export default function Standings() {
                 {[1, 2].map((idx) => activeGBPlayers[idx] && (
                   <motion.div key={idx} variants={itemVariants} className={`flex flex-col items-center text-center p-3 rounded-2xl bg-[#050b14]/80 border ${idx === 1 ? 'border-gray-400/30' : 'border-orange-700/30'} transition-colors`}>
                     <div className={`w-10 h-10 rounded-full border-2 mb-2 overflow-hidden bg-black ${idx === 1 ? 'border-gray-400 shadow-[0_0_10px_rgba(156,163,175,0.2)]' : 'border-orange-600 shadow-[0_0_10px_rgba(234,88,12,0.2)]'}`}>
-                      {activeGBPlayers[idx].videoUrl ? <video src={activeGBPlayers[idx].videoUrl} autoPlay loop muted playsInline className="w-full h-full object-cover" /> : <div className="w-full h-full bg-gray-900" />}
+                      {activeGBPlayers[idx].videoUrl ? <video src={activeGBPlayers[idx].videoUrl} autoPlay loop muted playsInline preload="metadata" className="w-full h-full object-cover" /> : <div className="w-full h-full bg-gray-900" />}
                     </div>
                     <p className="font-sport font-semibold text-sm text-gray-300 truncate w-full mb-1">{toTitleCase(activeGBPlayers[idx]?.name || '').split(' ')[0]}</p>
                     <div className="flex items-center gap-1.5 bg-black/40 px-3 py-1 rounded-full border border-white/5">
@@ -339,7 +339,7 @@ export default function Standings() {
                       <div className="flex items-center gap-3">
                         <span className="text-gray-600 font-black italic text-[10px] w-4">#{idx + 4}</span>
                         <div className="w-7 h-7 rounded-full overflow-hidden bg-black border border-white/10">
-                          {player.videoUrl ? <video src={player.videoUrl} autoPlay loop muted playsInline className="w-full h-full object-cover" /> : <div className="w-full h-full bg-gray-900" />}
+                          {player.videoUrl ? <video src={player.videoUrl} autoPlay loop muted playsInline preload="metadata" className="w-full h-full object-cover" /> : <div className="w-full h-full bg-gray-900" />}
                         </div>
                         <p className="font-sport font-semibold text-base text-gray-400 truncate max-w-[100px]">{toTitleCase(player?.name || '').split(' ')[0]}</p>
                       </div>
@@ -385,7 +385,7 @@ export default function Standings() {
                     <div className="flex items-center gap-3">
                       <div className="relative">
                         <div className={`w-10 h-10 rounded-full border-2 overflow-hidden bg-black ${idx === 0 ? 'border-neonGold shadow-[0_0_15px_rgba(250,204,21,0.4)]' : 'border-white/10'}`}>
-                          {player.videoUrl ? <video src={player.videoUrl} autoPlay loop muted playsInline className="w-full h-full object-cover scale-110" /> : <div className="w-full h-full bg-gray-800" />}
+                          {player.videoUrl ? <video src={player.videoUrl} autoPlay loop muted playsInline preload="metadata" className="w-full h-full object-cover scale-110" /> : <div className="w-full h-full bg-gray-800" />}
                         </div>
                         <span className={`absolute -bottom-1 -right-1 w-4 h-4 flex items-center justify-center rounded-full text-[8px] font-black border border-black bg-black ${rankStyle.text}`}>{idx + 1}</span>
                       </div>
