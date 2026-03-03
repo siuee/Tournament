@@ -55,6 +55,7 @@ const PlayerCareerCard = React.forwardRef<HTMLDivElement, PlayerCareerCardProps>
                 loop
                 muted
                 playsInline
+                preload="metadata"
                 className="w-full h-full object-cover object-top"
               />
             ) : (

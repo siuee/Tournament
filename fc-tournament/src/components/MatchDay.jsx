@@ -7,7 +7,7 @@ import { AnimatedDropdown } from './ui/dropdown-01';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toTitleCase } from '../lib/utils';
 
-export default function MatchDay({ belloMode, onGoalScored }) {
+export default function MatchDay({ onGoalScored }) {
   const [players, setPlayers] = useState([]);
   const [tournaments, setTournaments] = useState([]);
   const [matches, setMatches] = useState([]);
@@ -50,7 +50,7 @@ export default function MatchDay({ belloMode, onGoalScored }) {
     { name: 'eLaLiga', logo: '/assets/leagues/laliga.png' },
     { name: 'eSerie A', logo: '/assets/leagues/seriea.png' },
     { name: 'eLigue 1', logo: '/assets/leagues/ligue1.png' },
-    { name: 'eInternational', logo: '/assets/leagues/intl.jpg' },
+    { name: 'eInternational', logo: '/assets/leagues/nepal.png' },
     { name: 'eChampions League', logo: '/assets/leagues/ucl.png' }
   ];
 
@@ -234,7 +234,7 @@ export default function MatchDay({ belloMode, onGoalScored }) {
                       <div className="flex -space-x-3 shrink-0">
                         {team.playerData?.map((p, idx) => (
                           <div key={idx} className="w-10 h-10 rounded-full border-2 border-[#121212] overflow-hidden bg-black shadow-lg">
-                            <video src={p.videoUrl} autoPlay loop muted playsInline className="w-full h-full object-cover scale-110" />
+                            <video src={p.videoUrl} autoPlay loop muted playsInline preload="metadata" className="w-full h-full object-cover scale-110" />
                           </div>
                         ))}
                       </div>
@@ -367,7 +367,7 @@ export default function MatchDay({ belloMode, onGoalScored }) {
                           return (
                             <button key={p.id} disabled={isAlreadyTaken} onClick={() => handlePlayerClick(p, newTournament.format === '2v2' ? 2 : 1)} className={`p-3 sm:p-4 rounded-2xl sm:rounded-3xl border flex items-center gap-3 sm:gap-4 transition-all ${isSelected ? 'bg-yellow-500/10 border-yellow-500 text-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.2)]' : 'bg-black border-white/5 text-gray-300 hover:border-white/20'} ${isAlreadyTaken ? 'opacity-20 grayscale cursor-not-allowed' : 'active:scale-95'}`}>
                               <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full overflow-hidden bg-[#121212] border border-white/10 shrink-0">
-                                <video src={p.videoUrl} autoPlay loop muted playsInline className="w-full h-full object-cover scale-110" />
+                                <video src={p.videoUrl} autoPlay loop muted playsInline preload="metadata" className="w-full h-full object-cover scale-110" />
                               </div>
                               <span className="font-sport text-base sm:text-lg font-semibold tracking-wide text-left leading-none">{toTitleCase(p?.name || '')}</span>
                             </button>
@@ -417,7 +417,7 @@ export default function MatchDay({ belloMode, onGoalScored }) {
                         return (
                           <button key={p.id} disabled={isAlreadyTaken} onClick={() => handlePlayerClick(p, editingTournament.format === '2v2' ? 2 : 1)} className={`p-3 sm:p-4 rounded-2xl sm:rounded-3xl border flex items-center gap-3 sm:gap-4 transition-all ${isSelected ? 'bg-yellow-500/10 border-yellow-500 text-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.2)]' : 'bg-black border-white/5 text-gray-300 hover:border-white/20'} ${isAlreadyTaken ? 'opacity-20 grayscale cursor-not-allowed' : 'active:scale-95'}`}>
                             <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full overflow-hidden bg-[#121212] border border-white/10 shrink-0">
-                              <video src={p.videoUrl} autoPlay loop muted playsInline className="w-full h-full object-cover scale-110" />
+                              <video src={p.videoUrl} autoPlay loop muted playsInline preload="metadata" className="w-full h-full object-cover scale-110" />
                             </div>
                             <span className="font-sport text-base sm:text-lg font-semibold tracking-wide text-left leading-none">{toTitleCase(p?.name || '')}</span>
                           </button>

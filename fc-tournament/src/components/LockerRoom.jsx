@@ -341,7 +341,7 @@ export default function LockerRoom() {
                         <span className={`text-2xl md:text-3xl font-black leading-none tracking-tighter ${isMaxLevel ? 'text-transparent bg-clip-text bg-gradient-to-b from-white to-yellow-200 drop-shadow-[0_0_10px_rgba(255,255,255,0.5)]' : 'text-white'}`}>{stats.ovr}</span>
                         <span className="text-xs md:text-sm font-black text-yellow-500 uppercase tracking-widest leading-none mt-0.5">ST</span>
                         <div className="w-6 h-[1px] bg-yellow-500/50 mt-1 mb-1" />
-                        <img src="/assets/leagues/intl.jpg" className="w-4 h-3 md:w-5 md:h-4 object-cover rounded-[1px] opacity-90" alt="Nation" />
+                        <img src="/assets/leagues/nepal.png" className="w-4 h-3 md:w-5 md:h-4 object-cover rounded-[1px] opacity-90" alt="Nation" />
                       </div>
 
                       {/* CLUB RANK BADGE */}
@@ -353,7 +353,7 @@ export default function LockerRoom() {
                       {/* CENTER PLAYER VIDEO (Faded Mask) */}
                       <div className="absolute top-0 left-0 right-0 h-[60%] z-10 flex items-end justify-center pointer-events-none" style={{ maskImage: 'linear-gradient(to bottom, black 50%, transparent 100%)', WebkitMaskImage: 'linear-gradient(to bottom, black 50%, transparent 100%)' }}>
                         {player.videoUrl ? (
-                          <video src={player.videoUrl} autoPlay loop muted playsInline className="w-full h-[120%] object-cover object-top" />
+                          <video src={player.videoUrl} autoPlay loop muted playsInline preload="metadata" className="w-full h-[120%] object-cover object-top" />
                         ) : (
                           <div className="w-24 h-24 mb-10 rounded-full border border-yellow-500/30 bg-[#121212] flex items-center justify-center shadow-[0_0_30px_rgba(234,179,8,0.2)]">
                             <Camera className="text-yellow-600/50 w-8 h-8" />
@@ -446,7 +446,7 @@ export default function LockerRoom() {
                   <label className="text-[10px] font-bold text-yellow-500 uppercase tracking-widest ml-1 flex items-center gap-2"><Sparkles className="w-3 h-3"/> Dynamic Image Scan</label>
                   <div className="flex items-center gap-4 bg-black/80 p-3 rounded-2xl border border-yellow-500/20">
                     <div className="w-20 h-24 rounded-lg overflow-hidden bg-[#0a0a0c] border border-yellow-600/50 shadow-[0_0_15px_rgba(234,179,8,0.2)] shrink-0">
-                       {(tempVideoUrl || editingPlayer?.videoUrl) ? <video src={tempVideoUrl || editingPlayer.videoUrl} autoPlay loop muted playsInline className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center"><Video className="w-5 h-5 text-yellow-600/50" /></div>}
+                       {(tempVideoUrl || editingPlayer?.videoUrl) ? <video src={tempVideoUrl || editingPlayer.videoUrl} autoPlay loop muted playsInline preload="metadata" className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center"><Video className="w-5 h-5 text-yellow-600/50" /></div>}
                     </div>
                     <motion.button type="button" onClick={(ev) => enterStudio(ev)} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} className="flex-1 h-full py-5 bg-gradient-to-br from-gray-900 to-black border border-yellow-500/30 rounded-xl text-[10px] font-black uppercase tracking-widest text-yellow-500 hover:text-white hover:border-yellow-400 shadow-md">Enter Studio</motion.button>
                   </div>
