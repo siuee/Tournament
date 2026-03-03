@@ -167,24 +167,36 @@ function App() {
         className="min-h-screen relative z-10"
       >
 
-        {/* --- DESKTOP PRO NAVIGATION --- */}
-        <nav className="hidden md:flex fixed top-6 left-1/2 -translate-x-1/2 z-[100] w-full max-w-5xl px-4">
+        {/* Curly navbar clip-path: flat sides, curly dip only between 1/4 and 3/4 */}
+        <svg width="0" height="0" className="absolute">
+          <defs>
+            <clipPath id="navbar-curve" clipPathUnits="objectBoundingBox">
+              <path d="M 0 0 L 1 0 L 1 0.82 L 0.75 0.82 C 0.7 1.2 0.55 1.25 0.5 1.12 C 0.45 0.99 0.3 1.2 0.25 0.82 L 0 0.82 Z" />
+            </clipPath>
+          </defs>
+        </svg>
+        {/* --- DESKTOP CURVED NAVBAR --- */}
+        <nav className="hidden md:flex fixed top-6 left-1/2 -translate-x-1/2 z-[100] w-full max-w-4xl px-4 justify-center">
           <motion.div 
             initial={{ y: -100 }} animate={{ y: 0 }}
-            className="w-full bg-[#0a0a0c]/80 border-white/10 backdrop-blur-xl border rounded-full p-2 flex justify-between items-center shadow-[0_20px_50px_rgba(0,0,0,0.3)] transition-all duration-500"
+            className="relative w-full pt-1 bg-[#0a0a0c]/95 backdrop-blur-xl border border-white/10 rounded-[28px] shadow-[0_20px_50px_rgba(0,0,0,0.4)]"
+            style={{ clipPath: 'url(#navbar-curve)' }}
           >
-            <div className="flex items-center gap-3 pl-4 pr-6 border-r border-white/10">
-              <div className="text-yellow-500 drop-shadow-[0_0_10px_rgba(234,179,8,0.5)]"><BananaIcon className="w-8 h-8" /></div>
-              <div className="flex flex-col">
-                <h1 className="text-xl font-black italic tracking-tighter uppercase leading-none text-white">Banana <span className="text-yellow-500">FC</span></h1>
-                <span className="text-[7px] font-black tracking-[0.3em] text-gray-500 uppercase">Tournament Hub</span>
+            <div className="px-6 lg:px-12 py-5 flex justify-between items-center max-w-7xl mx-auto">
+              {/* Logo */}
+              <div className="flex items-center gap-3">
+                <div className="text-yellow-500 drop-shadow-[0_0_10px_rgba(234,179,8,0.5)]"><BananaIcon className="w-8 h-8" /></div>
+                <div className="flex flex-col">
+                  <h1 className="text-xl font-black italic tracking-tighter uppercase leading-none text-white">Banana <span className="text-yellow-500">FC</span></h1>
+                  <span className="text-[7px] font-black tracking-[0.3em] text-gray-500 uppercase">Tournament Hub</span>
+                </div>
               </div>
-            </div>
-            
-            <div className="flex gap-2">
-              <NavBtn icon={<Activity size={16}/>} label="Standings" active={activeTab === 'standings'} onClick={() => setActiveTab('standings')} />
-              <NavBtn icon={<Gamepad2 size={16}/>} label="Match Day" active={activeTab === 'match'} onClick={() => setActiveTab('match')} />
-              <NavBtn icon={<Shield size={16}/>} label="Club" active={activeTab === 'locker'} onClick={() => setActiveTab('locker')} />
+              {/* Nav links */}
+              <div className="flex items-center gap-1">
+                <NavBtn icon={<Activity size={16}/>} label="Standings" active={activeTab === 'standings'} onClick={() => setActiveTab('standings')} />
+                <NavBtn icon={<Gamepad2 size={16}/>} label="Match Day" active={activeTab === 'match'} onClick={() => setActiveTab('match')} />
+                <NavBtn icon={<Shield size={16}/>} label="Club" active={activeTab === 'locker'} onClick={() => setActiveTab('locker')} />
+              </div>
             </div>
           </motion.div>
         </nav>
@@ -212,11 +224,11 @@ function App() {
           <ShockwaveControls />
         </div>
 
-        {/* --- MOBILE CONSOLE TAB BAR --- */}
+        {/* --- MOBILE CURVED TAB BAR --- */}
         <nav className="md:hidden fixed bottom-6 left-4 right-4 z-[100]">
           <motion.div 
             initial={{ y: 100 }} animate={{ y: 0 }}
-            className="flex justify-around items-center p-3 rounded-[35px] border backdrop-blur-2xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] transition-all duration-500 bg-[#0a0a0c]/90 border-white/10"
+            className="flex justify-around items-center py-4 px-4 rounded-t-[60px] rounded-b-[60px] border border-white/10 backdrop-blur-2xl shadow-[0_-10px_40px_rgba(0,0,0,0.5)] transition-all duration-500 bg-[#0a0a0c]/95"
           >
             <MobTab icon={<Activity />} label="RANK" active={activeTab === 'standings'} onClick={() => setActiveTab('standings')} />
             <MobTab icon={<Gamepad2 />} label="PLAY" active={activeTab === 'match'} onClick={() => setActiveTab('match')} />

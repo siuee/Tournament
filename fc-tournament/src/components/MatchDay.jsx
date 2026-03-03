@@ -213,13 +213,21 @@ export default function MatchDay({ onGoalScored }) {
                 </h3>
                 <span className="inline-block mt-2 text-[9px] font-black uppercase tracking-widest bg-yellow-500/10 text-yellow-500 px-2 py-1 rounded border border-yellow-500/20">{t.format}</span>
                 
-                {/* Action Buttons - Stacked on very small screens */}
+                {/* Action Buttons - Left side, away from logo */}
                 <div className="flex flex-wrap gap-2 mt-5">
                   <motion.button onClick={(e) => openWithClick(() => { setActiveTournament(t); setShowMatchModal(true); }, e)} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} className="flex items-center gap-2 text-[10px] font-black uppercase bg-yellow-500 text-black px-4 py-2.5 rounded-xl shadow-[0_0_10px_rgba(234,179,8,0.3)]">
                     <Sword className="w-3 h-3" /> Play Match
                   </motion.button>
                   <motion.button onClick={(e) => openWithClick(() => { setEditingTournament(t); setSelectedForTeam([]); setShowEditModal(true); }, e)} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} className="flex items-center gap-2 text-[10px] font-black uppercase bg-white/5 text-gray-300 px-4 py-2.5 rounded-xl border border-white/10 hover:border-yellow-500 hover:text-yellow-500">
                     <UserPlus className="w-3 h-3" /> Add Team
+                  </motion.button>
+                  <motion.button 
+                    onClick={() => {if(confirm("Delete league?")) { deleteDoc(doc(db, "tournaments", t.id)); fetchData(); }}}
+                    whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
+                    className="flex items-center gap-2 text-[10px] font-black uppercase bg-red-500/20 text-red-400 px-4 py-2.5 rounded-xl border border-red-500/50 hover:bg-red-500 hover:text-white hover:border-red-500"
+                    title="Delete league"
+                  >
+                    <Trash2 className="w-3 h-3" /> Delete
                   </motion.button>
                 </div>
               </div>
@@ -254,7 +262,6 @@ export default function MatchDay({ onGoalScored }) {
                 </div>
               ))}
             </div>
-            <button onClick={() => {if(confirm("Delete league?")) { deleteDoc(doc(db, "tournaments", t.id)); fetchData(); }}} className="absolute top-4 sm:top-6 right-4 sm:right-6 text-red-500 opacity-0 group-hover:opacity-100 transition-opacity bg-black/50 p-2 rounded-lg border border-red-500/30 hover:bg-red-500 hover:text-white"><Trash2 className="w-4 h-4" /></button>
           </div>
         ))}
       </div>
