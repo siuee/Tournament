@@ -176,7 +176,7 @@ function App() {
           </defs>
         </svg>
         {/* --- DESKTOP CURVED NAVBAR --- */}
-        <nav className="hidden md:flex fixed top-6 left-1/2 -translate-x-1/2 z-[100] w-full max-w-4xl px-4 justify-center">
+        <nav className="hidden md:flex fixed top-4 left-1/2 -translate-x-1/2 z-[100] w-full max-w-4xl px-4 justify-center">
           <motion.div 
             initial={{ y: -100 }} animate={{ y: 0 }}
             className="relative w-full pt-1 bg-[#0a0a0c]/95 backdrop-blur-xl border border-white/10 rounded-[28px] shadow-[0_20px_50px_rgba(0,0,0,0.4)]"
@@ -202,7 +202,7 @@ function App() {
         </nav>
 
         {/* --- MAIN PAGE CONTENT --- */}
-        <main className="w-full md:pt-28 pb-28 md:pb-12 px-4 relative z-10">
+        <main className="w-full md:pt-36 pb-28 md:pb-12 px-4 relative z-10">
           <AnimatePresence mode="wait">
             <motion.div
               key={activeTab}
