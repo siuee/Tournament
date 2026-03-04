@@ -243,19 +243,22 @@ function App() {
         <ShockwaveControls />
 
         {/* --- MOBILE CURVED TAB BAR --- */}
-        <nav className="md:hidden fixed bottom-6 left-4 right-4 z-[100] pointer-events-none">
-          <motion.div 
-            initial={{ y: 120, opacity: 0 }}
-            animate={{ y: hideMobileNav ? 140 : 0, opacity: hideMobileNav ? 0 : 1 }}
-            transition={{ type: "spring", stiffness: 220, damping: 24 }}
-            className="pointer-events-auto flex justify-around items-center py-4 px-4 rounded-t-[60px] rounded-b-[60px] border border-white/10 backdrop-blur-2xl shadow-[0_-10px_40px_rgba(0,0,0,0.5)] bg-[#0a0a0c]/95"
-          >
-            <MobTab icon={<Activity />} label="RANK" active={activeTab === 'standings'} onClick={() => setActiveTab('standings')} />
-            <MobTab icon={<Gamepad2 />} label="PLAY" active={activeTab === 'match'} onClick={() => setActiveTab('match')} />
-            <MobTab icon={<PartyPopper />} label="CELEBRATE" active={activeTab === 'insider'} onClick={() => setActiveTab('insider')} />
-            <MobTab icon={<TicketPercent />} label="BET" active={activeTab === 'betting'} onClick={() => setActiveTab('betting')} />
-            <MobTab icon={<Shield />} label="CLUB" active={activeTab === 'locker'} onClick={() => setActiveTab('locker')} />
-          </motion.div>
+        <nav className="md:hidden fixed bottom-4 left-3 right-3 z-[100] pointer-events-none">
+          {/* Glowing yellow edge around the navbar on phone view */}
+          <div className="pointer-events-auto rounded-[60px] p-[2px] bg-gradient-to-r from-yellow-500/70 via-amber-400/70 to-yellow-500/70 shadow-[0_-10px_40px_rgba(234,179,8,0.45)]">
+            <motion.div 
+              initial={{ y: 120, opacity: 0 }}
+              animate={{ y: hideMobileNav ? 140 : 0, opacity: hideMobileNav ? 0 : 1 }}
+              transition={{ type: "spring", stiffness: 220, damping: 24 }}
+              className="flex justify-around items-center py-4 px-4 rounded-[56px] border border-white/15 backdrop-blur-2xl bg-[#050509]/95"
+            >
+              <MobTab icon={<Activity />} label="RANK" active={activeTab === 'standings'} onClick={() => setActiveTab('standings')} />
+              <MobTab icon={<Gamepad2 />} label="PLAY" active={activeTab === 'match'} onClick={() => setActiveTab('match')} />
+              <MobTab icon={<PartyPopper />} label="CELEBRATE" active={activeTab === 'insider'} onClick={() => setActiveTab('insider')} />
+              <MobTab icon={<TicketPercent />} label="BET" active={activeTab === 'betting'} onClick={() => setActiveTab('betting')} />
+              <MobTab icon={<Shield />} label="CLUB" active={activeTab === 'locker'} onClick={() => setActiveTab('locker')} />
+            </motion.div>
+          </div>
         </nav>
 
         {/* --- 3D SMASH OVERLAY --- */}
@@ -295,7 +298,8 @@ function App() {
 
 
       {/* --- EASTER EGG FLOATING ACTION BUTTONS --- */}
-      <div className="fixed bottom-28 md:bottom-8 right-6 z-[9999] flex flex-col items-center gap-4">
+      {/* Soccer ball sits well above the + FAB and mobile nav on all screen sizes */}
+      <div className="flex fixed bottom-32 md:bottom-24 left-6 z-[9999] flex-col items-center gap-4">
         <AnimatePresence mode="wait">
           {!isSmashMode ? (
             <motion.button
@@ -340,11 +344,11 @@ const NavBtn = ({ icon, label, active, onClick }) => (
 
 // STYLIZED MOBILE TAB
 const MobTab = ({ icon, label, active, onClick }) => (
-  <button onClick={onClick} className="flex flex-col items-center justify-center relative px-6 py-2">
-    <div className={`p-3.5 rounded-2xl transition-all duration-500 ${active ? 'bg-yellow-500 text-black shadow-xl rotate-[10deg] scale-110' : 'bg-white/5 text-gray-600'}`}>
+  <button onClick={onClick} className="flex flex-col items-center justify-center relative px-3 sm:px-4 py-1.5">
+    <div className={`p-2.5 sm:p-3.5 rounded-2xl transition-all duration-500 ${active ? 'bg-yellow-500 text-black shadow-xl rotate-[10deg] scale-110' : 'bg-white/5 text-gray-600'}`}>
       {icon}
     </div>
-    <span className={`text-[8px] font-black uppercase mt-2 tracking-[0.2em] transition-all ${active ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'} text-white`}>
+    <span className={`text-[8px] font-black uppercase mt-1.5 tracking-[0.18em] transition-all ${active ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'} text-white`}>
       {label}
     </span>
   </button>
@@ -424,7 +428,7 @@ const ShockwaveControls = () => {
   ];
 
   return (
-    <div className="fixed bottom-24 left-4 md:bottom-4 z-[200]">
+    <div className="fixed bottom-20 md:bottom-6 left-4 z-[200]">
       <AnimatedSocialIcons icons={themeIcons} iconSize={20} className="w-auto" />
     </div>
   );

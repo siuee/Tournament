@@ -10,6 +10,7 @@ import {
   Flame,
   Coins,
   Percent,
+  Trash2,
 } from 'lucide-react';
 import { db } from '../firebase';
 import { collection, getDocs } from 'firebase/firestore';
@@ -117,6 +118,13 @@ function getPayout(stake, odds) {
   }
   const total = s + win;
   return { win, total };
+}
+
+function getRiskFromWin(winAmount, odds) {
+  const w = Number(winAmount) || 0;
+  if (!w || !odds) return 0;
+  if (odds > 0) return (w * 100) / odds;
+  return (w * Math.abs(odds)) / 100;
 }
 
 // Fun-only win probability based on simple team stats.
@@ -504,6 +512,7 @@ export default function Betting() {
             totals={totals}
             onToggleSelection={toggleSelection}
             onStakeChange={setStake}
+            onClearAll={() => setBetslip([])}
             onBack={() => {
               setDetailMatch(null);
               setDetailTournament(null);
@@ -764,6 +773,7 @@ function MatchDetailView({
   totals,
   onToggleSelection,
   onStakeChange,
+  onClearAll,
 }) {
   const kickoff = match.kickoff instanceof Date ? match.kickoff : new Date(match.kickoff);
   const kickoffText = kickoff.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
@@ -924,6 +934,7 @@ function MatchDetailView({
             totals={totals}
             onToggleSelection={onToggleSelection}
             onStakeChange={onStakeChange}
+            onClearAll={onClearAll}
           />
         )}
       </div>
@@ -931,7 +942,7 @@ function MatchDetailView({
   );
 }
 
-function BetMarketsPanel({ match, betslip, stake, totals, onToggleSelection, onStakeChange }) {
+function BetMarketsPanel({ match, betslip, stake, totals, onToggleSelection, onStakeChange, onClearAll }) {
   const home = match.home || 'Home';
   const away = match.away || 'Away';
 
@@ -943,37 +954,56 @@ function BetMarketsPanel({ match, betslip, stake, totals, onToggleSelection, onS
     return betslip.some(sel => sel.key === key);
   };
 
-  // Core match winner / result style markets
+  // Correct Score: split into Home | Draw | Away columns for clean tabular layout
+  const scoreToOdds = (h, a) => {
+    const total = h + a;
+    const baseOdds = total <= 2 ? 400 : total <= 4 ? 500 + total * 80 : 600 + total * 100;
+    return baseOdds + Math.abs(h - a) * 20;
+  };
+  const correctScoreHome = [];
+  const correctScoreDraw = [];
+  const correctScoreAway = [];
+  for (let h = 0; h <= 10; h++) {
+    for (let a = 0; a <= 10; a++) {
+      const label = `${h} - ${a}`;
+      const odds = scoreToOdds(h, a);
+      if (h > a) correctScoreHome.push({ label, odds });
+      else if (h === a) correctScoreDraw.push({ label, odds });
+      else correctScoreAway.push({ label, odds });
+    }
+  }
+  // Sort by total goals then by score
+  const sortScores = (arr) =>
+    arr.sort((x, y) => {
+      const [xh, xa] = x.label.split(' - ').map(Number);
+      const [yh, ya] = y.label.split(' - ').map(Number);
+      const xt = xh + xa;
+      const yt = yh + ya;
+      if (xt !== yt) return xt - yt;
+      return xh - yh;
+    });
+  sortScores(correctScoreHome);
+  sortScores(correctScoreDraw);
+  sortScores(correctScoreAway);
+
+  const correctScoreMarket = {
+    label: 'Correct Score (Full Time)',
+    layout: 'correctScore',
+    homeCol: correctScoreHome,
+    drawCol: correctScoreDraw,
+    awayCol: correctScoreAway,
+    homeTeam: home,
+    awayTeam: away,
+    anyOtherOdds: 350,
+  };
+
   const coreMarkets = [
-    {
-      label: 'Match Winner (2-Way)',
-      description: '(Draw = void)',
-      options: [
-        { label: home, odds: -165 },
-        { label: away, odds: +145 },
-      ],
-    },
     {
       label: 'Match Winner (3-Way / 1X2)',
       options: [
         { label: home, odds: -110 },
         { label: 'Draw', odds: +275 },
         { label: away, odds: +210 },
-      ],
-    },
-    {
-      label: 'To Lift the Trophy / To Advance',
-      options: [
-        { label: home, odds: -150 },
-        { label: away, odds: +130 },
-      ],
-    },
-    {
-      label: 'Correct Score (Full Time)',
-      options: [
-        { label: '2 - 1', odds: +650 },
-        { label: '3 - 2', odds: +900 },
-        { label: 'Any Other', odds: +350 },
       ],
     },
     {
@@ -1609,6 +1639,11 @@ function BetMarketsPanel({ match, betslip, stake, totals, onToggleSelection, onS
       title: 'Multi-Goal & Specific Margin Outcomes',
       markets: multiGoalMarkets,
     },
+    {
+      key: 'correct-score',
+      title: 'Correct Score (Full Time)',
+      markets: [correctScoreMarket],
+    },
   ];
 
   return (
@@ -1622,70 +1657,188 @@ function BetMarketsPanel({ match, betslip, stake, totals, onToggleSelection, onS
           >
             <div className="px-4 sm:px-5 py-3 border-b border-white/10 bg-gradient-to-r from-yellow-500/10 via-yellow-400/5 to-yellow-500/10 flex items-center justify-between gap-3">
               <div>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-yellow-200">
+                <p className="text-sm font-semibold uppercase tracking-[0.2em] text-yellow-200">
                   {section.title}
                 </p>
-                <p className="text-[10px] text-gray-400">
+                <p className="text-xs text-gray-400">
                   Tap odds to add or remove fun picks.
                 </p>
               </div>
             </div>
             <div className="overflow-x-auto">
-              <table className="min-w-full text-xs sm:text-[11px] text-gray-100">
+              <table className="min-w-full text-sm sm:text-base text-gray-100">
                 <tbody>
-                  {section.markets.map((mkt, idx) => (
-                    <tr
-                      key={`${section.key}-${idx}`}
-                      className={idx % 2 === 0 ? 'bg-black/40' : 'bg-black/20'}
-                    >
-                      <td className="align-top px-3 sm:px-4 py-2.5 border-t border-white/5 w-56">
-                        <div className="flex flex-col">
-                          <span className="font-medium text-[11px] text-gray-100">
-                            {mkt.label}
-                          </span>
-                          {mkt.description && (
-                            <span className="text-[10px] text-gray-500">
-                              {mkt.description}
+                  {section.markets.map((mkt, idx) => {
+                    const marketLabel = `${section.title} · ${mkt.label}`;
+                    if (mkt.layout === 'correctScore') {
+                      const maxRows = Math.max(
+                        (mkt.homeCol?.length || 0),
+                        (mkt.drawCol?.length || 0),
+                        (mkt.awayCol?.length || 0)
+                      );
+                      return (
+                        <tr key={`${section.key}-${idx}`} className="bg-black/30">
+                          <td colSpan={2} className="p-0 border-t border-white/5 align-top">
+                            <div className="px-3 sm:px-4 py-3">
+                              <p className="font-medium text-sm text-gray-100 mb-3">
+                                {mkt.label}
+                              </p>
+                              <table className="w-full border-collapse text-sm">
+                                <thead>
+                                  <tr className="bg-white/5 border-b border-white/10">
+                                    <th className="px-3 py-2.5 text-left font-semibold text-gray-200 w-1/3 text-sm sm:text-base">
+                                      {mkt.homeTeam}
+                                    </th>
+                                    <th className="px-3 py-2.5 text-left font-semibold text-gray-200 w-1/3 text-sm sm:text-base">
+                                      Draw
+                                    </th>
+                                    <th className="px-3 py-2.5 text-left font-semibold text-gray-200 w-1/3 text-sm sm:text-base">
+                                      {mkt.awayTeam}
+                                    </th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {Array.from({ length: maxRows }).map((_, r) => (
+                                    <tr key={r} className="border-b border-white/5 hover:bg-white/5">
+                                      <td className="px-3 py-1.5 align-middle">
+                                        {mkt.homeCol[r] ? (
+                                          <button
+                                            type="button"
+                                            onClick={() =>
+                                              onToggleSelection(match, marketLabel, mkt.homeCol[r].label, mkt.homeCol[r].odds)
+                                            }
+                                            className={`w-full flex items-center justify-between gap-2 py-1 px-2 rounded transition-all text-left ${
+                                              isSelected(marketLabel, mkt.homeCol[r].label)
+                                                ? 'bg-yellow-500/30 border border-yellow-400'
+                                                : 'hover:bg-white/5'
+                                            }`}
+                                          >
+                                            <span className="text-gray-100 text-sm sm:text-base">{mkt.homeCol[r].label}</span>
+                                            <span className="font-mono font-bold text-yellow-300 text-sm sm:text-base">
+                                              {formatAmericanOdds(mkt.homeCol[r].odds)}
+                                            </span>
+                                          </button>
+                                        ) : null}
+                                      </td>
+                                      <td className="px-3 py-1.5 align-middle">
+                                        {mkt.drawCol[r] ? (
+                                          <button
+                                            type="button"
+                                            onClick={() =>
+                                              onToggleSelection(match, marketLabel, mkt.drawCol[r].label, mkt.drawCol[r].odds)
+                                            }
+                                            className={`w-full flex items-center justify-between gap-2 py-1 px-2 rounded transition-all text-left ${
+                                              isSelected(marketLabel, mkt.drawCol[r].label)
+                                                ? 'bg-yellow-500/30 border border-yellow-400'
+                                                : 'hover:bg-white/5'
+                                            }`}
+                                          >
+                                            <span className="text-gray-100 text-sm sm:text-base">{mkt.drawCol[r].label}</span>
+                                            <span className="font-mono font-bold text-yellow-300 text-sm sm:text-base">
+                                              {formatAmericanOdds(mkt.drawCol[r].odds)}
+                                            </span>
+                                          </button>
+                                        ) : null}
+                                      </td>
+                                      <td className="px-3 py-1.5 align-middle">
+                                        {mkt.awayCol[r] ? (
+                                          <button
+                                            type="button"
+                                            onClick={() =>
+                                              onToggleSelection(match, marketLabel, mkt.awayCol[r].label, mkt.awayCol[r].odds)
+                                            }
+                                            className={`w-full flex items-center justify-between gap-2 py-1 px-2 rounded transition-all text-left ${
+                                              isSelected(marketLabel, mkt.awayCol[r].label)
+                                                ? 'bg-yellow-500/30 border border-yellow-400'
+                                                : 'hover:bg-white/5'
+                                            }`}
+                                          >
+                                            <span className="text-gray-100 text-sm sm:text-base">{mkt.awayCol[r].label}</span>
+                                            <span className="font-mono font-bold text-yellow-300 text-sm sm:text-base">
+                                              {formatAmericanOdds(mkt.awayCol[r].odds)}
+                                            </span>
+                                          </button>
+                                        ) : null}
+                                      </td>
+                                    </tr>
+                                  ))}
+                                  {mkt.anyOtherOdds != null && (
+                                    <tr className="border-t border-white/10 bg-white/5">
+                                      <td colSpan={3} className="px-3 py-2">
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            onToggleSelection(match, marketLabel, 'Any Other', mkt.anyOtherOdds)
+                                          }
+                                          className={`w-full flex items-center justify-between gap-2 py-1.5 px-2 rounded transition-all text-left ${
+                                            isSelected(marketLabel, 'Any Other')
+                                              ? 'bg-yellow-500/30 border border-yellow-400'
+                                              : 'hover:bg-white/5'
+                                          }`}
+                                        >
+                                          <span className="text-gray-100 font-medium">Any Other</span>
+                                          <span className="font-mono font-bold text-yellow-300 text-sm sm:text-base">
+                                            {formatAmericanOdds(mkt.anyOtherOdds)}
+                                          </span>
+                                        </button>
+                                      </td>
+                                    </tr>
+                                  )}
+                                </tbody>
+                              </table>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    }
+                    return (
+                      <tr
+                        key={`${section.key}-${idx}`}
+                        className={idx % 2 === 0 ? 'bg-black/40' : 'bg-black/20'}
+                      >
+                        <td className="align-top px-3 sm:px-4 py-2.5 border-t border-white/5 w-56">
+                          <div className="flex flex-col">
+                            <span className="font-medium text-sm text-gray-100">
+                              {mkt.label}
                             </span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="align-top px-3 sm:px-4 py-2.5 border-t border-white/5">
-                        <div className="flex flex-wrap gap-1.5">
-                          {mkt.options.map((opt, i) => {
-                            const marketLabel = `${section.title} · ${mkt.label}`;
-                            const selected = isSelected(marketLabel, opt.label);
-                            return (
-                              <button
-                                key={i}
-                                type="button"
-                                onClick={() =>
-                                  onToggleSelection(
-                                    match,
-                                    marketLabel,
-                                    opt.label,
-                                    opt.odds,
-                                  )
-                                }
-                                className={`inline-flex items-center justify-between gap-1.5 rounded-full border px-2.5 py-1 transition-all ${
-                                  selected
-                                    ? 'border-yellow-400 bg-yellow-500/30 shadow-[0_0_20px_rgba(250,204,21,0.45)] scale-[0.98]'
-                                    : 'border-white/10 bg-white/5 hover:border-yellow-400/70 hover:bg-yellow-500/10'
-                                }`}
-                              >
-                                <span className="text-[10px] font-medium text-gray-100 truncate max-w-[120px] sm:max-w-[160px]">
-                                  {opt.label}
-                                </span>
-                                <span className="text-[10px] font-bold text-yellow-300 font-mono">
-                                  {formatAmericanOdds(opt.odds)}
-                                </span>
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                            {mkt.description && (
+                              <span className="text-xs text-gray-500">
+                                {mkt.description}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="align-top px-3 sm:px-4 py-2.5 border-t border-white/5">
+                          <div className="flex flex-wrap gap-1.5">
+                            {mkt.options?.map((opt, i) => {
+                              const selected = isSelected(marketLabel, opt.label);
+                              return (
+                                <button
+                                  key={i}
+                                  type="button"
+                                  onClick={() =>
+                                    onToggleSelection(match, marketLabel, opt.label, opt.odds)
+                                  }
+                                  className={`inline-flex items-center justify-between gap-2 rounded-full border px-3 py-1.5 transition-all ${
+                                    selected
+                                      ? 'border-yellow-400 bg-yellow-500/30 shadow-[0_0_20px_rgba(250,204,21,0.45)] scale-[0.98]'
+                                      : 'border-white/10 bg-white/5 hover:border-yellow-400/70 hover:bg-yellow-500/10'
+                                  }`}
+                                >
+                                  <span className="text-sm font-medium text-gray-100 truncate max-w-[120px] sm:max-w-[160px]">
+                                    {opt.label}
+                                  </span>
+                                  <span className="text-sm font-bold text-yellow-300 font-mono">
+                                    {formatAmericanOdds(opt.odds)}
+                                  </span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -1695,15 +1848,28 @@ function BetMarketsPanel({ match, betslip, stake, totals, onToggleSelection, onS
 
       {/* Right side: fixed bet slip on large screens, inline on mobile */}
       {/* Mobile / small screens: slip appears below markets and scrolls normally */}
-      <div className="mt-4 w-full max-w-sm lg:hidden">
+      <div id="bet-slip-section" className="mt-4 w-full max-w-sm lg:hidden scroll-mt-4">
         <BetSlipCard
           betslip={betslip}
           stake={stake}
           totals={totals}
           onToggleSelection={onToggleSelection}
           onStakeChange={onStakeChange}
+          onClearAll={onClearAll}
         />
       </div>
+
+      {/* Mobile: floating pill to jump to bet slip — above navbar, labeled for clarity */}
+      <motion.button
+        onClick={() => document.getElementById('bet-slip-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+        className="lg:hidden fixed bottom-36 right-4 z-[105] rounded-full bg-gradient-to-br from-cyan-500 to-cyan-700 shadow-[0_4px_20px_rgba(34,211,238,0.5)] border border-cyan-300/50 flex items-center justify-center gap-1.5 px-3 py-2.5 text-white font-black uppercase text-[10px] tracking-wider"
+        whileHover={{ scale: 1.05 }}
+        whileTap={{ scale: 0.95 }}
+        aria-label="Go to bet slip"
+      >
+        <TicketPercent className="w-4 h-4 shrink-0" />
+        <span>Slip</span>
+      </motion.button>
 
       {/* Desktop: slip fixed to viewport right, does not move when markets scroll */}
       <div className="hidden lg:block">
@@ -1714,6 +1880,7 @@ function BetMarketsPanel({ match, betslip, stake, totals, onToggleSelection, onS
             totals={totals}
             onToggleSelection={onToggleSelection}
             onStakeChange={onStakeChange}
+            onClearAll={onClearAll}
           />
         </div>
       </div>
@@ -1721,8 +1888,9 @@ function BetMarketsPanel({ match, betslip, stake, totals, onToggleSelection, onS
   );
 }
 
-function BetSlipCard({ betslip, stake, totals, onToggleSelection, onStakeChange }) {
+function BetSlipCard({ betslip, stake, totals, onToggleSelection, onStakeChange, onClearAll }) {
   const [localStakes, setLocalStakes] = useState({});
+  const [winDraft, setWinDraft] = useState({}); // raw Win input while typing to avoid overwriting mid-edit
 
   return (
     <div className="rounded-2xl border border-cyan-400/60 bg-gradient-to-br from-[#020617] via-[#020617] to-[#0f172a] shadow-[0_0_45px_rgba(34,211,238,0.45)] p-4 sm:p-5 relative overflow-hidden">
@@ -1735,32 +1903,36 @@ function BetSlipCard({ betslip, stake, totals, onToggleSelection, onStakeChange 
               <Coins className="relative w-5 h-5 text-cyan-200 drop-shadow-[0_0_12px_rgba(34,211,238,0.9)]" />
             </div>
             <div>
-              <h3 className="text-sm font-black uppercase tracking-[0.18em] text-cyan-100 drop-shadow-[0_0_10px_rgba(34,211,238,0.9)]">
+              <h3 className="text-base font-black uppercase tracking-[0.18em] text-cyan-100 drop-shadow-[0_0_10px_rgba(34,211,238,0.9)]">
                 Bet Slip
               </h3>
-              <p className="text-[10px] text-cyan-300/80 uppercase tracking-[0.18em]">
+              <p className="text-xs text-cyan-300/80 uppercase tracking-[0.18em]">
                 Fun only
               </p>
             </div>
           </div>
           {betslip.length > 0 && (
-            <span className="text-[10px] font-bold text-fuchsia-300 uppercase tracking-[0.18em] bg-fuchsia-500/10 border border-fuchsia-400/40 rounded-full px-2 py-0.5">
+            <span className="text-xs font-bold text-fuchsia-300 uppercase tracking-[0.18em] bg-fuchsia-500/10 border border-fuchsia-400/40 rounded-full px-2 py-0.5">
               {betslip.length} picks
             </span>
           )}
         </div>
 
         {betslip.length === 0 ? (
-          <p className="text-[11px] text-cyan-100/80">
+          <p className="text-sm text-cyan-100/80">
             Tap any odds on the left to add a selection.
           </p>
         ) : (
-          <>
-            <div className="space-y-3 mb-4 max-h-64 overflow-y-auto pr-1 custom-scrollbar-thin">
-            {betslip.map((sel) => {
+          (() => {
+            let totalStake = 0;
+            let totalWin = 0;
+
+            const renderedSelections = betslip.map((sel) => {
               const riskRaw = localStakes[sel.key] ?? '';
               const riskNum = Number(riskRaw) || 0;
               const { win } = getPayout(riskNum || 0, sel.odds);
+              totalStake += riskNum;
+              totalWin += win;
               return (
                 <div
                   key={sel.key}
@@ -1776,88 +1948,114 @@ function BetSlipCard({ betslip, stake, totals, onToggleSelection, onStakeChange 
                         sel.odds,
                       )
                     }
-                    className="absolute -top-1 -right-1 text-[9px] text-cyan-200 hover:text-white bg-slate-900/80 border border-cyan-400/60 rounded-full px-1.5"
+                    className="absolute -top-1 -right-1 text-xs text-cyan-200 hover:text-white bg-slate-900/80 border border-cyan-400/60 rounded-full px-1.5"
                   >
                     ×
                   </button>
-                  <p className="text-[10px] font-bold text-cyan-300 uppercase tracking-[0.2em] mb-1">
+                  <p className="text-xs font-bold text-cyan-300 uppercase tracking-[0.2em] mb-1">
                     {sel.market}
                   </p>
-                  <p className="text-xs font-semibold text-slate-50 mb-0.5 line-clamp-1">
+                  <p className="text-sm font-semibold text-slate-50 mb-0.5 line-clamp-1">
                     {sel.matchLabel}
                   </p>
-                  <div className="flex items-center justify-between text-[11px] text-slate-200 mt-0.5">
+                  <div className="flex items-center justify-between text-sm text-slate-200 mt-0.5">
                     <span>{sel.selection}</span>
                     <span className="font-semibold text-cyan-300 drop-shadow-[0_0_8px_rgba(34,211,238,0.8)]">
                       {formatAmericanOdds(sel.odds)}
                     </span>
                   </div>
-                  <div className="mt-2 flex gap-2">
-                    <input
-                      type="text"
-                      inputMode="decimal"
-                      placeholder="Risk"
-                      value={riskRaw}
-                      onChange={(e) => {
-                        const v = e.target.value.replace(/[^0-9.]/g, '');
-                        setLocalStakes((prev) => ({ ...prev, [sel.key]: v }));
-                      }}
-                      className="flex-1 rounded-xl bg-slate-900/80 border border-cyan-500/50 px-2.5 py-1.5 text-[11px] text-cyan-100 placeholder:text-slate-500 focus:outline-none focus:border-emerald-400"
-                    />
-                    <div className="flex-1 rounded-xl bg-slate-900/60 border border-emerald-400/40 px-2.5 py-1.5 text-[11px] text-emerald-200 flex items-center justify-between">
-                      <span className="opacity-70">Win</span>
-                      <span className="font-semibold">
-                        {riskNum ? win.toFixed(2) : '--'}
-                      </span>
+                  <div className="mt-2 grid grid-cols-2 gap-2">
+                    <div className="flex flex-col gap-0.5">
+                      <span className="text-xs font-bold text-cyan-300/80 uppercase tracking-wider">Risk</span>
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        placeholder="0"
+                        value={riskRaw}
+                        onChange={(e) => {
+                          const v = e.target.value.replace(/[^0-9.]/g, '');
+                          setLocalStakes((prev) => ({ ...prev, [sel.key]: v }));
+                        }}
+                        className="w-full min-w-0 rounded-xl bg-slate-900/80 border border-cyan-500/50 px-2.5 py-1.5 text-sm text-cyan-100 placeholder:text-slate-500 focus:outline-none focus:border-cyan-400"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-0.5">
+                      <span className="text-xs font-bold text-emerald-300/80 uppercase tracking-wider">Win</span>
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        placeholder="0"
+                        value={winDraft[sel.key] ?? (riskNum ? win.toFixed(2) : '')}
+                        onChange={(e) => {
+                          const v = e.target.value.replace(/[^0-9.]/g, '');
+                          setWinDraft((prev) => ({ ...prev, [sel.key]: v }));
+                          const risk = getRiskFromWin(v, sel.odds);
+                          setLocalStakes((prev) => ({ ...prev, [sel.key]: v ? String(risk.toFixed(2)) : '' }));
+                        }}
+                        onBlur={() => setWinDraft((prev) => {
+                          const next = { ...prev };
+                          delete next[sel.key];
+                          return next;
+                        })}
+                        className="w-full min-w-0 rounded-xl bg-slate-900/80 border border-emerald-400/50 px-2.5 py-1.5 text-sm text-emerald-200 placeholder:text-slate-500 focus:outline-none focus:border-emerald-400"
+                      />
                     </div>
                   </div>
                 </div>
               );
-            })}
-          </div>
+            });
 
-            <div className="space-y-3 border-t border-cyan-500/40 pt-3">
-            <div className="flex items-center justify-between gap-2">
-              <label className="text-[10px] font-black uppercase tracking-[0.2em] text-cyan-200">
-                Stake per pick
-              </label>
-              <div className="flex items-center gap-1.5">
-                <span className="text-xs text-cyan-300">¤</span>
-                <input
-                  value={stake}
-                  onChange={(e) =>
-                    onStakeChange(e.target.value.replace(/[^0-9.]/g, ''))
-                  }
-                  className="w-20 bg-slate-950 border border-cyan-500/60 rounded-lg px-2 py-1.5 text-xs text-cyan-100 focus:outline-none focus:border-emerald-400 focus:ring-0"
-                />
-              </div>
-            </div>
-            <div className="flex items-center justify-between text-xs text-slate-200">
-              <span>Potential win (all picks)</span>
-              <span className="font-bold text-emerald-300">
-                +{totals.win.toFixed(2)}
-              </span>
-            </div>
-            <div className="flex items-center justify-between text-xs text-slate-200">
-              <span>Total return</span>
-              <span className="font-bold text-emerald-200">
-                {totals.total.toFixed(2)}
-              </span>
-            </div>
-            <motion.button
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              className="w-full mt-1 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 via-fuchsia-500 to-emerald-400 text-black text-xs font-black uppercase tracking-[0.2em] flex items-center justify-center gap-1 shadow-[0_0_26px_rgba(6,182,212,0.75)]"
-              type="button"
-            >
-              <Percent className="w-3.5 h-3.5" />
-              Confirm Slip
-            </motion.button>
-            <p className="text-[9px] text-cyan-200/80 leading-relaxed">
-              For entertainment only. No real bets.
-            </p>
-          </div>
-          </>
+            return (
+              <>
+                <div className="space-y-3 mb-4 max-h-64 overflow-y-auto pr-1 custom-scrollbar-thin">
+                  {renderedSelections}
+                </div>
+
+                <div className="space-y-3 border-t border-cyan-500/40 pt-3">
+                  <div className="flex items-center justify-between text-sm text-slate-200">
+                    <span>Total amount placed</span>
+                    <span className="font-bold text-cyan-200">
+                      {totalStake ? totalStake.toFixed(2) : '--'}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-sm text-slate-200">
+                    <span>Total potential win</span>
+                    <span className="font-bold text-emerald-300">
+                      {totalWin ? totalWin.toFixed(2) : '--'}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-sm text-slate-200">
+                    <span>Total return</span>
+                    <span className="font-bold text-emerald-200">
+                      {totalStake || totalWin ? (totalStake + totalWin).toFixed(2) : '--'}
+                    </span>
+                  </div>
+                  <motion.button
+                    type="button"
+                    onClick={() => { onClearAll?.(); setLocalStakes({}); setWinDraft({}); }}
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    className="w-full mt-1 py-2 rounded-xl border border-red-400/60 bg-red-500/10 text-red-300 text-xs font-black uppercase tracking-[0.18em] flex items-center justify-center gap-1.5 hover:bg-red-500/20 transition-colors"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    Clear selection
+                  </motion.button>
+                  <motion.button
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    className="w-full mt-1 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 via-fuchsia-500 to-emerald-400 text-black text-sm font-black uppercase tracking-[0.2em] flex items-center justify-center gap-1 shadow-[0_0_26px_rgba(6,182,212,0.75)]"
+                    type="button"
+                  >
+                    <Percent className="w-3.5 h-3.5" />
+                    Confirm Slip
+                  </motion.button>
+                  <p className="text-xs text-cyan-200/80 leading-relaxed">
+                    For entertainment only. No real bets.
+                  </p>
+                </div>
+              </>
+            );
+          })()
         )}
       </div>
     </div>

@@ -280,7 +280,7 @@ export default function LockerRoom() {
   return (
     <div className="min-h-screen relative text-white pb-32 overflow-hidden">
       {/* Header */}
-      <div className="px-4 md:px-8 pt-6 pb-4 border-b border-yellow-500/20 mb-8 bg-black/60 backdrop-blur-xl sticky top-0 z-30 flex justify-between items-center shadow-[0_10px_30px_rgba(0,0,0,0.5)]">
+      <div className="px-4 md:px-8 pt-6 pb-4 border-b border-yellow-500/20 mb-4 md:mb-8 bg-black/60 backdrop-blur-xl sticky top-0 z-30 flex justify-between items-center shadow-[0_10px_30px_rgba(0,0,0,0.5)]">
          <div>
             <h2 className="text-3xl md:text-5xl font-black italic uppercase tracking-tighter text-transparent bg-clip-text bg-gradient-to-b from-yellow-200 via-yellow-500 to-yellow-700 drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)] flex items-center gap-3">
               My Club
@@ -300,6 +300,18 @@ export default function LockerRoom() {
          >
            <UserPlus className="w-4 h-4" /> Open Pack
          </motion.button>
+      </div>
+
+      {/* MOBILE OPEN PACK BUTTON – placed under header so it never hides behind bottom navbar */}
+      <div className="md:hidden px-4 pb-4">
+        <motion.button 
+          onClick={(e) => openWithClick(() => setIsFormOpen(true), e)} 
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+          className="w-full bg-gradient-to-b from-yellow-300 via-yellow-500 to-yellow-600 py-3 rounded-2xl font-black uppercase tracking-[0.2em] text-xs text-black shadow-[0_8px_20px_rgba(234,179,8,0.4)] flex items-center justify-center gap-2 border border-yellow-200"
+        >
+          <UserPlus className="w-4 h-4" /> Open Pack
+        </motion.button>
       </div>
 
       {/* FC PLAYER CARDS GRID */}
@@ -414,18 +426,6 @@ export default function LockerRoom() {
             );
           })}
         </motion.div>
-      </div>
-
-      {/* MOBILE STICKY BOTTOM BUTTON */}
-      <div className="md:hidden fixed bottom-6 left-0 right-0 px-4 z-40">
-        <motion.button 
-          onClick={(e) => openWithClick(() => setIsFormOpen(true), e)} 
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-          className="w-full bg-gradient-to-b from-yellow-300 via-yellow-500 to-yellow-600 py-4 rounded-[20px] font-black uppercase tracking-[0.2em] text-sm text-black shadow-[0_10px_25px_rgba(234,179,8,0.4)] flex items-center justify-center gap-2 border border-yellow-200"
-        >
-          <UserPlus className="w-5 h-5" /> Open Pack
-        </motion.button>
       </div>
 
       {/* ADD / EDIT PLAYER MODAL */}
