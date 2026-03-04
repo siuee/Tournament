@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { db, storage } from '../firebase';
 import { collection, getDocs, addDoc, doc, updateDoc, deleteDoc, query, orderBy, increment } from 'firebase/firestore';
+import { verifyDeletePassword } from '../lib/security';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { Eye, Upload, Video, Image, Camera, X, Loader2, Film, Heart, MessageCircle, Share2, Trash2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -127,6 +128,10 @@ export default function InsiderInsight() {
   const [commentPostId, setCommentPostId] = useState(null);
   const [sharePost, setSharePost] = useState(null);
   const clickOriginRef = useRef({ x: 0, y: 0 });
+  const [deleteTargetPost, setDeleteTargetPost] = useState(null);
+  const [deletePassword, setDeletePassword] = useState('');
+  const [deleteError, setDeleteError] = useState('');
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   useEffect(() => {
     fetchPosts();
@@ -203,18 +208,47 @@ export default function InsiderInsight() {
     }
   }, []);
 
-  const handleDelete = useCallback(async (post) => {
-    if (!confirm('Delete this post?')) return;
+  const openDeleteModal = useCallback((post) => {
+    setDeleteTargetPost(post);
+    setDeletePassword('');
+    setDeleteError('');
+    setDeleteLoading(false);
+  }, []);
+
+  const closeDeleteModal = useCallback(() => {
+    setDeleteTargetPost(null);
+    setDeletePassword('');
+    setDeleteError('');
+    setDeleteLoading(false);
+  }, []);
+
+  const executeDeletePost = useCallback(async () => {
+    if (!deleteTargetPost) return;
+    const pwd = deletePassword?.trim();
+    if (!pwd) {
+      setDeleteError('Please enter the admin password.');
+      return;
+    }
+    setDeleteLoading(true);
     try {
-      await deleteDoc(doc(db, 'insider_insights', post.id));
-      setPosts(prev => prev.filter(p => p.id !== post.id));
-      setExpandedPost(prev => (prev?.id === post.id ? null : prev));
-      setCommentPostId(prev => (prev === post.id ? null : prev));
+      const ok = await verifyDeletePassword(pwd);
+      if (!ok) {
+        setDeleteError('Incorrect password.');
+        setDeleteLoading(false);
+        return;
+      }
+      await deleteDoc(doc(db, 'insider_insights', deleteTargetPost.id));
+      setPosts(prev => prev.filter(p => p.id !== deleteTargetPost.id));
+      setExpandedPost(prev => (prev?.id === deleteTargetPost.id ? null : prev));
+      setCommentPostId(prev => (prev === deleteTargetPost.id ? null : prev));
+      if (sharePost?.id === deleteTargetPost.id) setSharePost(null);
+      closeDeleteModal();
     } catch (e) {
       console.error('Delete failed:', e);
-      alert('Failed to delete.');
+      setDeleteError('Failed to delete. Please try again.');
+      setDeleteLoading(false);
     }
-  }, []);
+  }, [deleteTargetPost, deletePassword, setPosts, setExpandedPost, setCommentPostId, sharePost, closeDeleteModal]);
 
   const handleShare = useCallback((post) => setSharePost(post), []);
 
@@ -513,6 +547,7 @@ export default function InsiderInsight() {
                   onShare={() => handleShare(post)}
                   likedIds={likedIds}
                   formatDate={formatMatchDateTime}
+                  onDelete={openDeleteModal}
                 />
               ))}
             </div>
@@ -569,7 +604,7 @@ export default function InsiderInsight() {
                     {/* Action bar – Delete, Like, Comment, Share */}
                     <div className="flex items-center justify-center gap-6 mt-4">
                       <motion.button
-                        onClick={(e) => { e.stopPropagation(); handleDelete(expandedPost); }}
+                        onClick={(e) => { e.stopPropagation(); openDeleteModal(expandedPost); }}
                         whileHover={{ scale: 1.1 }}
                         whileTap={{ scale: 0.95 }}
                         className="flex flex-col items-center gap-0.5 text-red-400/80 hover:text-red-400"
@@ -630,6 +665,73 @@ export default function InsiderInsight() {
                   onClose={() => setSharePost(null)}
                   onShared={handleShareIncrement}
                 />
+              )}
+            </AnimatePresence>
+            {/* Delete post modal */}
+            <AnimatePresence>
+              {deleteTargetPost && (
+                <div className="fixed inset-0 z-[1003] flex items-center justify-center bg-black/90 backdrop-blur-md p-4">
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.95 }}
+                    transition={{ type: 'spring', stiffness: 320, damping: 30 }}
+                    className="bg-[#0a0a0c] border border-yellow-500/30 w-full max-w-md p-6 sm:p-8 rounded-[26px] shadow-[0_0_50px_rgba(234,179,8,0.25)] relative"
+                  >
+                    <button
+                      onClick={closeDeleteModal}
+                      className="absolute top-4 right-4 sm:top-5 sm:right-5 text-gray-500 hover:text-white transition-colors"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                    <div className="mb-6">
+                      <p className="text-yellow-500 text-[10px] font-black tracking-widest uppercase mb-1">Delete Clip</p>
+                      <h2 className="text-xl sm:text-2xl font-black italic uppercase tracking-tighter text-white drop-shadow-md">
+                        Permanently Delete?
+                      </h2>
+                    </div>
+                    <p className="text-sm text-gray-400 mb-6">
+                      This will remove the media and all its comments. This action cannot be undone.
+                    </p>
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-yellow-500">
+                          Admin Password
+                        </label>
+                        <input
+                          type="password"
+                          value={deletePassword}
+                          onChange={(e) => { setDeletePassword(e.target.value); setDeleteError(''); }}
+                          placeholder="Enter password to confirm"
+                          disabled={deleteLoading}
+                          className="w-full bg-black border border-white/10 rounded-xl px-4 py-3 text-white font-sport font-semibold placeholder:text-gray-600 focus:border-yellow-500 focus:outline-none transition-colors disabled:opacity-50"
+                          autoFocus
+                        />
+                      </div>
+                      {deleteError && <p className="text-sm text-red-400">{deleteError}</p>}
+                      <div className="flex gap-3 pt-2">
+                        <motion.button
+                          onClick={closeDeleteModal}
+                          disabled={deleteLoading}
+                          whileHover={{ scale: deleteLoading ? 1 : 1.02 }}
+                          whileTap={{ scale: 0.98 }}
+                          className="flex-1 py-3 rounded-xl font-black text-[10px] sm:text-xs uppercase tracking-widest bg-white/5 text-gray-400 border border-white/10 hover:border-white/20 hover:text-white transition-colors disabled:opacity-50"
+                        >
+                          Cancel
+                        </motion.button>
+                        <motion.button
+                          onClick={executeDeletePost}
+                          disabled={deleteLoading || !deletePassword?.trim()}
+                          whileHover={{ scale: deleteLoading || !deletePassword?.trim() ? 1 : 1.02 }}
+                          whileTap={{ scale: 0.98 }}
+                          className="flex-1 py-3 rounded-xl font-black text-[10px] sm:text-xs uppercase tracking-widest bg-red-500/20 text-red-400 border border-red-500/50 hover:bg-red-500/30 hover:border-red-500 hover:text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                        >
+                          {deleteLoading ? <><Loader2 className="w-4 h-4 animate-spin" /> Deleting...</> : <>Delete Clip</>}
+                        </motion.button>
+                      </div>
+                    </div>
+                  </motion.div>
+                </div>
               )}
             </AnimatePresence>
           </>
@@ -1037,7 +1139,7 @@ function MediaLightboxVideo({ src }) {
   );
 }
 
-function InsiderPostCard({ post, index, onView, onExpand, onLike, onComment, onShare, likedIds, formatDate }) {
+function InsiderPostCard({ post, index, onView, onExpand, onLike, onComment, onShare, likedIds, formatDate, onDelete }) {
   const containerRef = useRef(null);
   const videoRef = useRef(null);
   const hasRecordedView = useRef(false);
@@ -1161,7 +1263,16 @@ function InsiderPostCard({ post, index, onView, onExpand, onLike, onComment, onS
         <div
           className="polaroid-shine-border relative mx-auto w-full h-full"
         >
-          <div className="w-full h-full bg-[#fdf7ec] rounded-xl border border-[#e2d4b7] shadow-[0_14px_30px_rgba(15,23,42,0.55)] flex flex-col px-3 pt-2 pb-4">
+          <div className="w-full h-full bg-[#fdf7ec] rounded-xl border border-[#e2d4b7] shadow-[0_14px_30px_rgba(15,23,42,0.55)] flex flex-col px-3 pt-2 pb-4 relative">
+          {onDelete && (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onDelete(post); }}
+              className="absolute top-2 right-2 z-20 p-1.5 rounded-full bg-black/65 border border-white/30 text-white/80 hover:text-red-400 hover:border-red-400 transition-colors"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          )}
           {/* Photo area */}
           <div className="relative h-[68%] rounded-md overflow-hidden bg-black/5">
             {post.mediaType === 'video' ? (
