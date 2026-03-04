@@ -127,7 +127,151 @@ function getRiskFromWin(winAmount, odds) {
   return (w * Math.abs(odds)) / 100;
 }
 
-// Fun-only win probability based on simple team stats.
+// Poisson PMF: P(X = k) for lambda
+function poissonPmf(k, lambda) {
+  if (lambda <= 0) return k === 0 ? 1 : 0;
+  let f = 1;
+  for (let i = 2; i <= k; i++) f *= i;
+  return (Math.exp(-lambda) * Math.pow(lambda, k)) / (f || 1);
+}
+
+// Compute P(home win), P(draw), P(away win) from historical matches using expected goals (Poisson).
+// teamStats: { games, goalsFor, goalsAgainst } per team.
+function computePoissonProbabilities(homeStats, awayStats) {
+  const defaultLambda = 1.2;
+  const homeAvgFor = homeStats.games > 0 ? homeStats.goalsFor / homeStats.games : defaultLambda;
+  const homeAvgAgainst = homeStats.games > 0 ? homeStats.goalsAgainst / homeStats.games : defaultLambda;
+  const awayAvgFor = awayStats.games > 0 ? awayStats.goalsFor / awayStats.games : defaultLambda;
+  const awayAvgAgainst = awayStats.games > 0 ? awayStats.goalsAgainst / awayStats.games : defaultLambda;
+  const lambdaHome = (homeAvgFor + awayAvgAgainst) / 2;
+  const lambdaAway = (awayAvgFor + homeAvgAgainst) / 2;
+  const maxGoals = 12;
+  let pHomeWin = 0, pDraw = 0, pAwayWin = 0;
+  for (let i = 0; i <= maxGoals; i++) {
+    const ph = poissonPmf(i, lambdaHome);
+    for (let j = 0; j <= maxGoals; j++) {
+      const pa = poissonPmf(j, lambdaAway);
+      const p = ph * pa;
+      if (i > j) pHomeWin += p;
+      else if (i === j) pDraw += p;
+      else pAwayWin += p;
+    }
+  }
+  const total = pHomeWin + pDraw + pAwayWin;
+  if (total <= 0) return { home: 34, draw: 33, away: 33 };
+  const scale = 100 / total;
+  const home = Math.round(pHomeWin * scale);
+  const draw = Math.round(pDraw * scale);
+  const away = 100 - home - draw;
+  return { home, draw, away };
+}
+
+// Build per-player career stats (goals, assists, games) from all matches.
+// Match doc: homeTeamPlayerIds, awayTeamPlayerIds, homeScore, awayScore, homePlayerGoals, awayPlayerGoals.
+// homePlayerGoals/awayPlayerGoals are arrays of { name, goals } (index matches team player ids). In 2v2, assists = partner's goals.
+function buildPlayerStatsFromMatches(allMatches) {
+  const map = new Map(); // playerId -> { games, goals, assists }
+  function add(playerId, goals, assists) {
+    if (!playerId) return;
+    let s = map.get(playerId);
+    if (!s) s = { games: 0, goals: 0, assists: 0 };
+    s.games += 1;
+    s.goals += Number(goals) || 0;
+    s.assists += Number(assists) || 0;
+    map.set(playerId, s);
+  }
+  allMatches.forEach((m) => {
+    const homeIds = m.homeTeamPlayerIds || [];
+    const awayIds = m.awayTeamPlayerIds || [];
+    const homeGoalsArr = m.homePlayerGoals || [];
+    const awayGoalsArr = m.awayPlayerGoals || [];
+    const homeScore = Number(m.homeScore) || 0;
+    const awayScore = Number(m.awayScore) || 0;
+
+    // Home side
+    if (homeIds.length === 1) {
+      const g = homeGoalsArr[0]?.goals != null ? Number(homeGoalsArr[0].goals) : homeScore;
+      add(homeIds[0], g, 0);
+    } else if (homeIds.length >= 2) {
+      const g0 = homeGoalsArr[0]?.goals != null ? Number(homeGoalsArr[0].goals) : Math.floor(homeScore / 2);
+      const g1 = homeGoalsArr[1]?.goals != null ? Number(homeGoalsArr[1].goals) : homeScore - Math.floor(homeScore / 2);
+      add(homeIds[0], g0, g1);
+      add(homeIds[1], g1, g0);
+    }
+    // Away side
+    if (awayIds.length === 1) {
+      const g = awayGoalsArr[0]?.goals != null ? Number(awayGoalsArr[0].goals) : awayScore;
+      add(awayIds[0], g, 0);
+    } else if (awayIds.length >= 2) {
+      const g0 = awayGoalsArr[0]?.goals != null ? Number(awayGoalsArr[0].goals) : Math.floor(awayScore / 2);
+      const g1 = awayGoalsArr[1]?.goals != null ? Number(awayGoalsArr[1].goals) : awayScore - Math.floor(awayScore / 2);
+      add(awayIds[0], g0, g1);
+      add(awayIds[1], g1, g0);
+    }
+  });
+  return map;
+}
+
+// Player quality = goals + k*assists (career total). Assists weighted slightly less than goals.
+const ASSIST_WEIGHT = 0.6;
+function playerQuality(stats) {
+  if (!stats) return 0;
+  return (Number(stats.goals) || 0) + ASSIST_WEIGHT * (Number(stats.assists) || 0);
+}
+
+// Compute win/draw/loss probabilities from player quality (1v1 or 2v2). If one side has all the quality and the other none, favourite gets 100%.
+// Returns null when both sides have zero quality (caller should use Poisson).
+function computePlayerStrengthProbabilities(homeTeam, awayTeam, playerStatsMap) {
+  const homePlayers = homeTeam?.playerData || [];
+  const awayPlayers = awayTeam?.playerData || [];
+  const is1v1 = homePlayers.length === 1 && awayPlayers.length === 1;
+
+  const teamStrength = (players) => {
+    let sum = 0;
+    (players || []).forEach((p) => {
+      const id = p?.id;
+      const s = id ? playerStatsMap.get(id) : null;
+      sum += playerQuality(s);
+    });
+    return sum;
+  };
+
+  const S_home = teamStrength(homePlayers);
+  const S_away = teamStrength(awayPlayers);
+
+  if (S_home > 0 && S_away <= 0) return { home: 100, draw: 0, away: 0 };
+  if (S_away > 0 && S_home <= 0) return { home: 0, draw: 0, away: 100 };
+  if (S_home <= 0 && S_away <= 0) return null;
+
+  const drawShare = 0.12;
+  const total = S_home + S_away;
+  const homeP = (1 - drawShare) * (S_home / total);
+  const awayP = (1 - drawShare) * (S_away / total);
+  const drawP = drawShare;
+  const scale = 100 / (homeP + awayP + drawP);
+  const home = Math.round(homeP * scale);
+  const draw = Math.round(drawP * scale);
+  const away = 100 - home - draw;
+  return { home, draw, away };
+}
+
+// Blend two probability objects (a and b) by weight w: w*a + (1-w)*b, then normalize to 100.
+function blendProbabilities(pa, pb, weightA) {
+  const w = Number(weightA);
+  const home = (pa.home * w + pb.home * (1 - w)) / 100;
+  const draw = (pa.draw * w + pb.draw * (1 - w)) / 100;
+  const away = (pa.away * w + pb.away * (1 - w)) / 100;
+  const total = home + draw + away;
+  if (total <= 0) return { home: 34, draw: 33, away: 33 };
+  const scale = 100 / total;
+  return {
+    home: Math.round(home * scale),
+    draw: Math.round(draw * scale),
+    away: 100 - Math.round(home * scale) - Math.round(draw * scale),
+  };
+}
+
+// Fun-only win probability based on simple team stats (fallback when no history).
 function computeWinProbabilities(match) {
   const h = match.homeTeamObj || {};
   const a = match.awayTeamObj || {};
@@ -240,6 +384,7 @@ export default function Betting() {
   const [detailTab, setDetailTab] = useState('preview'); // preview | probability | form | h2h | bet
   const [h2hState, setH2hState] = useState({ loading: false, error: null, summary: null, matches: [] });
   const [formState, setFormState] = useState({ loading: false, homeForm: null, awayForm: null });
+  const [probState, setProbState] = useState({ loading: false, home: null, draw: null, away: null });
 
   useEffect(() => {
     let mounted = true;
@@ -475,6 +620,73 @@ export default function Betting() {
     };
   }, [detailMatch, detailTab]);
 
+  // Load historical matches and compute data-driven win/draw/loss probabilities for Probability tab
+  useEffect(() => {
+    if (!detailMatch || detailTab !== 'probability') return;
+
+    const homeTeam = detailMatch.homeTeamObj;
+    const awayTeam = detailMatch.awayTeamObj;
+    if (!homeTeam || !awayTeam) {
+      setProbState({ loading: false, home: null, draw: null, away: null });
+      return;
+    }
+
+    let cancelled = false;
+
+    (async () => {
+      setProbState({ loading: true, home: null, draw: null, away: null });
+      try {
+        const snap = await getDocs(collection(db, 'matches'));
+        const all = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+        const getTeamStats = (team) => {
+          const teamMatches = all.filter(m =>
+            matchTeamToMatch(team, m, 'home') || matchTeamToMatch(team, m, 'away')
+          );
+          let goalsFor = 0, goalsAgainst = 0;
+          teamMatches.forEach((m) => {
+            const isHome = matchTeamToMatch(team, m, 'home');
+            const scored = isHome ? (Number(m.homeScore) || 0) : (Number(m.awayScore) || 0);
+            const conceded = isHome ? (Number(m.awayScore) || 0) : (Number(m.homeScore) || 0);
+            goalsFor += scored;
+            goalsAgainst += conceded;
+          });
+          return { games: teamMatches.length, goalsFor, goalsAgainst };
+        };
+
+        const homeStats = getTeamStats(homeTeam);
+        const awayStats = getTeamStats(awayTeam);
+        const poissonProbs = computePoissonProbabilities(homeStats, awayStats);
+
+        const playerStatsMap = buildPlayerStatsFromMatches(all);
+        const playerProbs = computePlayerStrengthProbabilities(homeTeam, awayTeam, playerStatsMap);
+
+        let probs;
+        if (playerProbs != null) {
+          if (playerProbs.home === 100 || playerProbs.away === 100) {
+            probs = playerProbs;
+          } else {
+            probs = blendProbabilities(playerProbs, poissonProbs, 0.85);
+          }
+        } else {
+          probs = poissonProbs;
+        }
+
+        if (!cancelled) {
+          setProbState({ loading: false, home: probs.home, draw: probs.draw, away: probs.away });
+        }
+      } catch (e) {
+        console.error('Failed to load probability data', e);
+        if (!cancelled) {
+          setProbState({ loading: false, home: null, draw: null, away: null });
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [detailMatch, detailTab]);
+
   return (
     <div className="relative flex flex-col gap-4 w-full pb-28 md:pb-20">
       {/* Header */}
@@ -507,6 +719,7 @@ export default function Betting() {
             tab={detailTab}
             setTab={setDetailTab}
             formState={formState}
+            probState={probState}
             betslip={betslip}
             stake={stake}
             totals={totals}
@@ -768,6 +981,7 @@ function MatchDetailView({
   onBack,
   h2hState,
   formState,
+  probState,
   betslip,
   stake,
   totals,
@@ -787,7 +1001,10 @@ function MatchDetailView({
     { id: 'bet', label: 'Bet' },
   ];
 
-  const probabilities = computeWinProbabilities(match);
+  const probabilities =
+    probState && probState.home != null && !probState.loading
+      ? { home: probState.home, draw: probState.draw, away: probState.away }
+      : computeWinProbabilities(match);
   const fallbackHomeForm = computeFormString(match.homeTeamObj || {});
   const fallbackAwayForm = computeFormString(match.awayTeamObj || {});
   const homeForm = formState?.homeForm || fallbackHomeForm;
@@ -898,10 +1115,17 @@ function MatchDetailView({
         )}
 
         {tab === 'probability' && (
-          <ProbabilityPanel
-            match={match}
-            probabilities={probabilities}
-          />
+          <>
+            {probState?.loading && (
+              <div className="rounded-2xl border border-white/10 bg-[#050509]/95 px-4 py-2 text-[11px] text-gray-400">
+                Loading probability from match history…
+              </div>
+            )}
+            <ProbabilityPanel
+              match={match}
+              probabilities={probabilities}
+            />
+          </>
         )}
 
         {tab === 'form' && (
