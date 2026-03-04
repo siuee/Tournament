@@ -16,3 +16,49 @@ body {
 .glass-card {
   @apply bg-glass backdrop-blur-md border border-white/10 rounded-2xl shadow-xl;
 }
+
+/* Polaroid shine border – animated multi-color edge */
+.polaroid-shine-border {
+  border-radius: 1.3rem;
+  padding: 4px;
+  /* Multi-stop repeating gradient so all colors are always present */
+  background-image: linear-gradient(
+    110deg,
+    #ff007f 0%,
+    #39ff14 20%,
+    #00ffff 40%,
+    #ff007f 60%,
+    #39ff14 80%,
+    #00ffff 100%
+  );
+  background-size: 400% 400%;
+  animation: polaroid-shine 4s linear infinite;
+}
+
+@keyframes polaroid-shine {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+/* Scroll styling matching dark theme for media/lightbox */
+.insider-media-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(234, 179, 8, 0.7) transparent;
+}
+.insider-media-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+.insider-media-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.insider-media-scroll::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #eab308, #f97316);
+  border-radius: 999px;
+}

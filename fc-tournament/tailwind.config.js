@@ -20,7 +20,23 @@ export default {
       },
       backgroundImage: {
         'glass': 'linear-gradient(to bottom right, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.01))',
-      }
+      },
+      animation: {
+        'shine-border': 'shine-pulse 8s linear infinite',
+      },
+      keyframes: {
+        'shine-pulse': {
+          '0%': {
+            'background-position': '0% 0%',
+          },
+          '50%': {
+            'background-position': '100% 100%',
+          },
+          '100%': {
+            'background-position': '0% 0%',
+          },
+        },
+      },
     },
   },
   plugins: [],

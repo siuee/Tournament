@@ -4,7 +4,7 @@ import { collection, getDocs, addDoc, doc, updateDoc, deleteDoc, query, orderBy,
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { Eye, Upload, Video, Image, Camera, X, Loader2, Film, Heart, MessageCircle, Share2, Trash2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { formatMatchDateTime, formatPolaroidDateTime } from '../lib/utils';
+import { formatMatchDateTime, formatPolaroidDateTime, formatCountShort } from '../lib/utils';
 
 const MAX_VIDEO_SECONDS = 60;
 
@@ -126,6 +126,7 @@ export default function InsiderInsight() {
   const [expandedPost, setExpandedPost] = useState(null);
   const [commentPostId, setCommentPostId] = useState(null);
   const [sharePost, setSharePost] = useState(null);
+  const clickOriginRef = useRef({ x: 0, y: 0 });
 
   useEffect(() => {
     fetchPosts();
@@ -147,7 +148,14 @@ export default function InsiderInsight() {
       const snap = await getDocs(q);
       setPosts(snap.docs.map(d => {
         const data = d.data();
-        return { id: d.id, ...data, viewCount: data.viewCount ?? 0, likeCount: data.likeCount ?? 0, commentCount: data.commentCount ?? 0 };
+        return {
+          id: d.id,
+          ...data,
+          viewCount: data.viewCount ?? 0,
+          likeCount: data.likeCount ?? 0,
+          commentCount: data.commentCount ?? 0,
+          shareCount: data.shareCount ?? 0,
+        };
       }));
     } catch (e) {
       console.error('Failed to fetch posts:', e);
@@ -185,6 +193,16 @@ export default function InsiderInsight() {
     }
   }, [likedIds]);
 
+  const handleShareIncrement = useCallback(async (postId) => {
+    try {
+      await updateDoc(doc(db, 'insider_insights', postId), { shareCount: increment(1) });
+      setPosts(prev => prev.map(p => p.id === postId ? { ...p, shareCount: (p.shareCount ?? 0) + 1 } : p));
+      setExpandedPost(p => (p && p.id === postId) ? { ...p, shareCount: (p.shareCount ?? 0) + 1 } : p);
+    } catch (e) {
+      console.error('Share increment failed:', e);
+    }
+  }, []);
+
   const handleDelete = useCallback(async (post) => {
     if (!confirm('Delete this post?')) return;
     try {
@@ -218,6 +236,27 @@ export default function InsiderInsight() {
       return null;
     }
   }, []);
+
+  const openWithClick = (post, e) => {
+    if (e?.clientX != null && e?.clientY != null && typeof window !== 'undefined') {
+      clickOriginRef.current = { x: e.clientX, y: e.clientY };
+    }
+    setExpandedPost(post);
+  };
+
+  const openCommentsForPost = (postId) => {
+    setCommentPostId(postId);
+    if (typeof window !== 'undefined' && window.innerWidth <= 768) {
+      window.dispatchEvent(new CustomEvent('insider-comment-open', { detail: true }));
+    }
+  };
+
+  const closeComments = () => {
+    setCommentPostId(null);
+    if (typeof window !== 'undefined' && window.innerWidth <= 768) {
+      window.dispatchEvent(new CustomEvent('insider-comment-open', { detail: false }));
+    }
+  };
 
   const resetUpload = () => {
     setCaption('');
@@ -328,8 +367,35 @@ export default function InsiderInsight() {
     }
   };
 
+  const capturePhoto = () => {
+    if (!videoRef.current) return;
+    try {
+      const videoEl = videoRef.current;
+      const canvas = document.createElement('canvas');
+      const width = videoEl.videoWidth || 720;
+      const height = videoEl.videoHeight || 1280;
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+      ctx.drawImage(videoEl, 0, 0, width, height);
+      canvas.toBlob((blob) => {
+        if (!blob) return;
+        if (previewUrl) URL.revokeObjectURL(previewUrl);
+        setRecordingBlob(blob);
+        setSelectedFile(null);
+        setPreviewUrl(URL.createObjectURL(blob));
+        setIsRecording(false);
+        setRecordingSeconds(0);
+      }, 'image/jpeg', 0.92);
+    } catch (e) {
+      console.error('Photo capture failed:', e);
+      setDurationError('Could not capture photo from camera.');
+    }
+  };
+
   const handleUpload = async () => {
-    const mediaBlob = recordingBlob || (selectedFile ? selectedFile : null);
+    const mediaBlob = recordingBlob || selectedFile || null;
     if (!mediaBlob) return;
 
     const isVideo = mediaBlob.type.startsWith('video/');
@@ -349,7 +415,13 @@ export default function InsiderInsight() {
     setUploading(true);
     setDurationError(null);
     try {
-      const ext = recordingBlob ? 'webm' : selectedFile.name.split('.').pop() || 'bin';
+      const isFromCamera = !!recordingBlob && !selectedFile;
+      let ext = 'bin';
+      if (isFromCamera) {
+        ext = mediaBlob.type.startsWith('image/') ? 'jpg' : 'webm';
+      } else if (selectedFile) {
+        ext = selectedFile.name.split('.').pop() || 'bin';
+      }
       const path = `insider_insights/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
       const storageRef = ref(storage, path);
       await uploadBytes(storageRef, mediaBlob);
@@ -364,6 +436,7 @@ export default function InsiderInsight() {
         viewCount: 0,
         likeCount: 0,
         commentCount: 0,
+        shareCount: 0,
       });
       resetUpload();
       fetchPosts();
@@ -399,7 +472,7 @@ export default function InsiderInsight() {
             whileTap={{ scale: 0.95 }}
             className="flex items-center gap-2 bg-gradient-to-r from-yellow-600 to-yellow-500 px-4 py-2.5 rounded-2xl font-black uppercase text-[10px] tracking-widest text-black shadow-[0_0_15px_rgba(234,179,8,0.4)]"
           >
-            <Upload className="w-4 h-4" /> Share
+            <Upload className="w-4 h-4" /> Upload
           </motion.button>
         </div>
       </div>
@@ -422,7 +495,7 @@ export default function InsiderInsight() {
               whileTap={{ scale: 0.98 }}
               className="px-6 py-3 rounded-xl bg-yellow-500/20 border border-yellow-500/40 text-yellow-500 font-black uppercase text-xs tracking-widest"
             >
-              Share Your First Clip
+              Upload Your First Clip
             </motion.button>
           </div>
         ) : (
@@ -434,9 +507,9 @@ export default function InsiderInsight() {
                   post={post}
                   index={i}
                   onView={recordView}
-                  onExpand={() => setExpandedPost(post)}
+                  onExpand={(e) => openWithClick(post, e)}
                   onLike={handleLike}
-                  onComment={() => setCommentPostId(post.id)}
+                  onComment={() => openCommentsForPost(post.id)}
                   onShare={() => handleShare(post)}
                   likedIds={likedIds}
                   formatDate={formatMatchDateTime}
@@ -461,11 +534,27 @@ export default function InsiderInsight() {
                     <X className="w-6 h-6" />
                   </button>
                   <motion.div
-                    initial={{ opacity: 0, scale: 0.85 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.9 }}
-                    transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-                    className="relative w-full max-w-2xl max-h-[90vh] flex flex-col items-center justify-center"
+                    initial={() => {
+                      if (typeof window === 'undefined') {
+                        return { opacity: 0, scale: 0.8, x: 0, y: 0 };
+                      }
+                      const { x, y } = clickOriginRef.current;
+                      const offsetX = x - window.innerWidth / 2;
+                      const offsetY = y - window.innerHeight / 2;
+                      return { opacity: 0, scale: 0.4, x: offsetX, y: offsetY };
+                    }}
+                    animate={{ opacity: 1, scale: 1, x: 0, y: 0 }}
+                    exit={() => {
+                      if (typeof window === 'undefined') {
+                        return { opacity: 0, scale: 0.8, x: 0, y: 0 };
+                      }
+                      const { x, y } = clickOriginRef.current;
+                      const offsetX = x - window.innerWidth / 2;
+                      const offsetY = y - window.innerHeight / 2;
+                      return { opacity: 0, scale: 0.4, x: offsetX, y: offsetY };
+                    }}
+                    transition={{ type: 'spring', damping: 24, stiffness: 260 }}
+                    className="relative w-full max-w-2xl max-h-[90vh] flex flex-col items-center justify-center insider-media-scroll overflow-y-auto"
                     onClick={(e) => e.stopPropagation()}
                   >
                     {expandedPost.mediaType === 'video' ? (
@@ -495,16 +584,16 @@ export default function InsiderInsight() {
                         className={`flex flex-col items-center gap-0.5 ${likedIds.has(expandedPost.id) ? 'text-red-500' : 'text-white/80 hover:text-red-400'}`}
                       >
                         <Heart className={`w-5 h-5 ${likedIds.has(expandedPost.id) ? 'fill-current' : ''}`} />
-                        <span className="text-[9px] font-bold">{expandedPost.likeCount ?? 0}</span>
+                        <span className="text-[9px] font-bold">{formatCountShort(expandedPost.likeCount)}</span>
                       </motion.button>
                       <motion.button
-                        onClick={(e) => { e.stopPropagation(); setCommentPostId(expandedPost.id); }}
+            onClick={(e) => { e.stopPropagation(); openCommentsForPost(expandedPost.id); }}
                         whileHover={{ scale: 1.1 }}
                         whileTap={{ scale: 0.95 }}
                         className="flex flex-col items-center gap-0.5 text-white/80 hover:text-yellow-400"
                       >
                         <MessageCircle className="w-5 h-5" />
-                        <span className="text-[9px] font-bold">{expandedPost.commentCount ?? 0}</span>
+                        <span className="text-[9px] font-bold">{formatCountShort(expandedPost.commentCount)}</span>
                       </motion.button>
                       <motion.button
                         onClick={(e) => { e.stopPropagation(); handleShare(expandedPost); }}
@@ -513,7 +602,7 @@ export default function InsiderInsight() {
                         className="flex flex-col items-center gap-0.5 text-white/80 hover:text-yellow-400"
                       >
                         <Share2 className="w-5 h-5" />
-                        <span className="text-[9px] font-bold uppercase">Share</span>
+                        <span className="text-[9px] font-bold">{formatCountShort(expandedPost.shareCount)}</span>
                       </motion.button>
                     </div>
                   </motion.div>
@@ -526,7 +615,7 @@ export default function InsiderInsight() {
                 <CommentPanel
                   key="comment-panel"
                   postId={commentPostId}
-                  onClose={() => setCommentPostId(null)}
+                  onClose={closeComments}
                   onAddComment={handleAddComment}
                   formatDate={formatMatchDateTime}
                 />
@@ -535,7 +624,12 @@ export default function InsiderInsight() {
             {/* Share modal */}
             <AnimatePresence>
               {sharePost && (
-                <ShareModal key="share-modal" post={sharePost} onClose={() => setSharePost(null)} />
+                <ShareModal
+                  key="share-modal"
+                  post={sharePost}
+                  onClose={() => setSharePost(null)}
+                  onShared={handleShareIncrement}
+                />
               )}
             </AnimatePresence>
           </>
@@ -587,7 +681,7 @@ export default function InsiderInsight() {
                       className="w-full flex items-center justify-center gap-2 py-4 rounded-2xl border border-white/20 bg-white/5 hover:bg-yellow-500/10 hover:border-yellow-500/50 transition-colors"
                     >
                       <Camera className="w-5 h-5 text-yellow-500" />
-                      <span className="font-black uppercase text-xs tracking-widest">Record with Camera (max {MAX_VIDEO_SECONDS}s)</span>
+                      <span className="font-black uppercase text-xs tracking-widest">Use Camera (photo or video, max {MAX_VIDEO_SECONDS}s)</span>
                     </motion.button>
                   </div>
                 )}
@@ -603,34 +697,44 @@ export default function InsiderInsight() {
                         </div>
                       )}
                     </div>
-                    <div className="flex gap-3">
+                    <div className="space-y-2">
                       <motion.button
                         onClick={() => { stopCamera(); setUseCamera(false); }}
                         whileHover={{ scale: 1.02 }}
                         whileTap={{ scale: 0.98 }}
-                        className="flex-1 py-3 rounded-xl border border-white/20 text-gray-400 font-bold uppercase text-xs hover:bg-white/5"
+                        className="w-full py-3 rounded-xl border border-white/20 text-gray-400 font-bold uppercase text-xs hover:bg-white/5"
                       >
-                        Cancel
+                        Close Camera
                       </motion.button>
-                      {isRecording ? (
+                      <div className="flex gap-3">
                         <motion.button
-                          onClick={stopRecording}
+                          onClick={capturePhoto}
                           whileHover={{ scale: 1.02 }}
                           whileTap={{ scale: 0.98 }}
-                          className="flex-1 py-3 rounded-xl bg-red-500/30 border border-red-500/50 text-red-400 font-bold uppercase text-xs"
+                          className="flex-1 py-3 rounded-xl bg-white/5 border border-white/30 text-white font-bold uppercase text-[11px]"
                         >
-                          Stop Recording
+                          Capture Photo
                         </motion.button>
-                      ) : (
-                        <motion.button
-                          onClick={startRecording}
-                          whileHover={{ scale: 1.02 }}
-                          whileTap={{ scale: 0.98 }}
-                          className="flex-1 py-3 rounded-xl bg-yellow-500/20 border border-yellow-500/50 text-yellow-500 font-bold uppercase text-xs"
-                        >
-                          Start Recording
-                        </motion.button>
-                      )}
+                        {isRecording ? (
+                          <motion.button
+                            onClick={stopRecording}
+                            whileHover={{ scale: 1.02 }}
+                            whileTap={{ scale: 0.98 }}
+                            className="flex-1 py-3 rounded-xl bg-red-500/30 border border-red-500/50 text-red-400 font-bold uppercase text-xs"
+                          >
+                            Stop Recording
+                          </motion.button>
+                        ) : (
+                          <motion.button
+                            onClick={startRecording}
+                            whileHover={{ scale: 1.02 }}
+                            whileTap={{ scale: 0.98 }}
+                            className="flex-1 py-3 rounded-xl bg-yellow-500/20 border border-yellow-500/50 text-yellow-500 font-bold uppercase text-xs"
+                          >
+                            Record Video
+                          </motion.button>
+                        )}
+                      </div>
                     </div>
                   </div>
                 )}
@@ -811,7 +915,7 @@ function CommentPanel({ postId, onClose, onAddComment, formatDate }) {
 }
 
 /** Share modal – social platforms, with optional share caption synced to DB */
-function ShareModal({ post, onClose }) {
+function ShareModal({ post, onClose, onShared }) {
   if (!post) return null;
   const [shareCaption, setShareCaption] = useState(post.shareCaption || post.caption || '');
   const shareUrl = typeof window !== 'undefined' ? window.location.href + '?insider=' + post.id : '';
@@ -828,6 +932,7 @@ function ShareModal({ post, onClose }) {
 
   const copyLink = (msg = 'Link copied!') => {
     persistCaption(shareCaption);
+    onShared?.(post.id);
     const payload = shareText ? `${shareText} ${shareUrl}` : shareUrl;
     navigator.clipboard?.writeText(payload).then(() => alert(msg)).catch(() => {});
   };
@@ -884,7 +989,10 @@ function ShareModal({ post, onClose }) {
                   rel="noopener noreferrer"
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
-                  onClick={() => persistCaption(shareCaption)}
+                  onClick={() => {
+                    persistCaption(shareCaption);
+                    onShared?.(post.id);
+                  }}
                   className="flex flex-col items-center gap-2 p-4 rounded-2xl bg-white/5 border border-white/10 hover:border-yellow-500/40 transition-colors"
                 >
                   <span style={{ color: pf.color }}><pf.Icon className="w-8 h-8" /></span>
@@ -915,15 +1023,17 @@ function MediaLightboxVideo({ src }) {
     v.play().catch(() => {});
   }, [src]);
   return (
-    <video
-      ref={videoRef}
-      src={src}
-      controls
-      playsInline
-      autoPlay
-      loop
-      className="max-w-full max-h-[75vh] object-contain rounded-2xl"
-    />
+    <div className="relative w-full max-w-xs sm:max-w-sm md:max-w-md aspect-[9/16] bg-black rounded-[32px] overflow-hidden shadow-[0_0_40px_rgba(0,0,0,0.7)]">
+      <video
+        ref={videoRef}
+        src={src}
+        controls
+        playsInline
+        autoPlay
+        loop
+        className="h-full w-full object-cover"
+      />
+    </div>
   );
 }
 
@@ -983,13 +1093,13 @@ function InsiderPostCard({ post, index, onView, onExpand, onLike, onComment, onS
                 muted
                 loop
                 preload="metadata"
-                className="w-full h-full object-cover pointer-events-none scale-[1.03] opacity-70"
+                className="w-full h-full object-contain pointer-events-none opacity-70"
               />
             ) : (
               <img
                 src={post.mediaUrl}
                 alt=""
-                className="w-full h-full object-cover pointer-events-none scale-[1.03] opacity-80"
+                className="w-full h-full object-contain pointer-events-none opacity-80"
               />
             )}
           </div>
@@ -1017,20 +1127,20 @@ function InsiderPostCard({ post, index, onView, onExpand, onLike, onComment, onS
                 muted
                 loop
                 preload="metadata"
-                className="w-full h-full object-cover pointer-events-none scale-[1.03] opacity-70"
+                className="w-full h-full object-contain pointer-events-none opacity-70"
               />
             ) : (
               <img
                 src={post.mediaUrl}
                 alt=""
-                className="w-full h-full object-cover pointer-events-none scale-[1.03] opacity-80"
+                className="w-full h-full object-contain pointer-events-none opacity-80"
               />
             )}
           </div>
         </div>
       </motion.div>
 
-      {/* Front Polaroid – main interactive card */}
+      {/* Front Polaroid – main interactive card with animated shine border */}
       <motion.div
         className="absolute inset-0 flex"
         style={{ transformOrigin: '50% 85%' }}
@@ -1048,7 +1158,10 @@ function InsiderPostCard({ post, index, onView, onExpand, onLike, onComment, onS
         onTouchEnd={() => setIsHovering(false)}
         onTouchCancel={() => setIsHovering(false)}
       >
-        <div className="mx-auto w-full h-full bg-[#fdf7ec] rounded-xl border border-[#e2d4b7] shadow-[0_14px_30px_rgba(15,23,42,0.55)] flex flex-col px-3 pt-2 pb-4">
+        <div
+          className="polaroid-shine-border relative mx-auto w-full h-full"
+        >
+          <div className="w-full h-full bg-[#fdf7ec] rounded-xl border border-[#e2d4b7] shadow-[0_14px_30px_rgba(15,23,42,0.55)] flex flex-col px-3 pt-2 pb-4">
           {/* Photo area */}
           <div className="relative h-[68%] rounded-md overflow-hidden bg-black/5">
             {post.mediaType === 'video' ? (
@@ -1059,10 +1172,18 @@ function InsiderPostCard({ post, index, onView, onExpand, onLike, onComment, onS
                 muted
                 loop
                 preload="metadata"
-                className="w-full h-full object-cover pointer-events-none"
+                className="w-full h-full object-contain pointer-events-none"
               />
             ) : (
-              <img src={post.mediaUrl} alt="" className="w-full h-full object-cover pointer-events-none" />
+              <img src={post.mediaUrl} alt="" className="w-full h-full object-contain pointer-events-none" />
+            )}
+            {/* Video play indicator */}
+            {post.mediaType === 'video' && (
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <div className="rounded-full bg-black/55 border border-white/80 p-2">
+                  <Video className="w-4 h-4 text-white" />
+                </div>
+              </div>
             )}
             {/* Views pill */}
             <div className="absolute top-2 left-2 flex items-center gap-1 rounded-full bg-black/65 px-2 py-0.5">
@@ -1087,6 +1208,7 @@ function InsiderPostCard({ post, index, onView, onExpand, onLike, onComment, onS
               {formatPolaroidDateTime(post.createdAt)}
             </p>
           </div>
+          </div>
         </div>
       </motion.div>
 
@@ -1102,7 +1224,7 @@ function InsiderPostCard({ post, index, onView, onExpand, onLike, onComment, onS
           <Heart className={`w-4.5 h-4.5 ${isLiked ? 'text-red-500 fill-current' : 'text-slate-800'}`} />
         </div>
         <div className="pointer-events-none text-[9px] font-semibold text-slate-900">
-          {post.likeCount ?? 0}
+          {formatCountShort(post.likeCount)}
         </div>
         <div
           className="pointer-events-auto flex items-center justify-center w-9 h-9 rounded-full bg-white shadow-md cursor-pointer"
@@ -1113,6 +1235,9 @@ function InsiderPostCard({ post, index, onView, onExpand, onLike, onComment, onS
         >
           <MessageCircle className="w-4.5 h-4.5 text-slate-800" />
         </div>
+        <div className="pointer-events-none text-[9px] font-semibold text-slate-900">
+          {formatCountShort(post.commentCount)}
+        </div>
         <div
           className="pointer-events-auto flex items-center justify-center w-9 h-9 rounded-full bg-white shadow-md cursor-pointer"
           onClick={(e) => {
@@ -1121,6 +1246,9 @@ function InsiderPostCard({ post, index, onView, onExpand, onLike, onComment, onS
           }}
         >
           <Share2 className="w-4.5 h-4.5 text-slate-800" />
+        </div>
+        <div className="pointer-events-none text-[9px] font-semibold text-slate-900">
+          {formatCountShort(post.shareCount)}
         </div>
       </div>
     </motion.article>

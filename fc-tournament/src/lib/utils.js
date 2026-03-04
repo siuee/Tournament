@@ -29,6 +29,20 @@ export function formatPolaroidDateTime(createdAt) {
   return `${date}  ${time}`;
 }
 
+/** Format counts like Instagram: 987, 1k, 1.2k, 10k, 1M, 1.3M */
+export function formatCountShort(value) {
+  const n = Number(value) || 0;
+  if (n >= 1_000_000) {
+    const num = n / 1_000_000;
+    return `${num.toFixed(num >= 10 ? 0 : 1).replace(/\.0$/, '')}M`;
+  }
+  if (n >= 1_000) {
+    const num = n / 1_000;
+    return `${num.toFixed(num >= 10 ? 0 : 1).replace(/\.0$/, '')}k`;
+  }
+  return `${n}`;
+}
+
 /** Title case: first letter uppercase, rest lowercase per word. */
 export function toTitleCase(str) {
   if (!str || typeof str !== 'string') return '';

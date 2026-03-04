@@ -85,6 +85,7 @@ const RealisticGlassShatter = () => {
 
 function App() {
   const [activeTab, setActiveTab] = useState('standings');
+  const [hideMobileNav, setHideMobileNav] = useState(false);
 
   // --- EASTER EGG STATES ---
   const [isSmashMode, setIsSmashMode] = useState(false);
@@ -147,6 +148,17 @@ function App() {
       ::-webkit-scrollbar-thumb { background: rgba(234, 179, 8, 0.3); }
     `;
   }, [screenFallen]);
+
+  // Listen for Insider comment open/close events to hide/show mobile navbar
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handler = (e) => {
+      const shouldHide = !!(e?.detail);
+      setHideMobileNav(shouldHide);
+    };
+    window.addEventListener('insider-comment-open', handler);
+    return () => window.removeEventListener('insider-comment-open', handler);
+  }, []);
 
   return (
     <div className="min-h-screen relative font-sans overflow-x-hidden">
@@ -226,10 +238,12 @@ function App() {
         <ShockwaveControls />
 
         {/* --- MOBILE CURVED TAB BAR --- */}
-        <nav className="md:hidden fixed bottom-6 left-4 right-4 z-[100]">
+        <nav className="md:hidden fixed bottom-6 left-4 right-4 z-[100] pointer-events-none">
           <motion.div 
-            initial={{ y: 100 }} animate={{ y: 0 }}
-            className="flex justify-around items-center py-4 px-4 rounded-t-[60px] rounded-b-[60px] border border-white/10 backdrop-blur-2xl shadow-[0_-10px_40px_rgba(0,0,0,0.5)] transition-all duration-500 bg-[#0a0a0c]/95"
+            initial={{ y: 120, opacity: 0 }}
+            animate={{ y: hideMobileNav ? 140 : 0, opacity: hideMobileNav ? 0 : 1 }}
+            transition={{ type: "spring", stiffness: 220, damping: 24 }}
+            className="pointer-events-auto flex justify-around items-center py-4 px-4 rounded-t-[60px] rounded-b-[60px] border border-white/10 backdrop-blur-2xl shadow-[0_-10px_40px_rgba(0,0,0,0.5)] bg-[#0a0a0c]/95"
           >
             <MobTab icon={<Activity />} label="RANK" active={activeTab === 'standings'} onClick={() => setActiveTab('standings')} />
             <MobTab icon={<Gamepad2 />} label="PLAY" active={activeTab === 'match'} onClick={() => setActiveTab('match')} />
