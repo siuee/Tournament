@@ -260,8 +260,8 @@ export default function Standings() {
         </div>
       </div>
 
-      {/* RIGHT COLUMN: SMART STICKY HUD */}
-      <div className="w-full xl:w-[380px] flex flex-col gap-6 xl:gap-8 xl:sticky xl:top-6 xl:max-h-[calc(100vh-48px)] overflow-y-auto no-scrollbar pr-1 pb-6 min-w-0 shrink-0 xl:shrink-0" style={{ WebkitMaskImage: 'linear-gradient(to bottom, black 98%, transparent 100%)', maskImage: 'linear-gradient(to bottom, black 98%, transparent 100%)' }}>
+      {/* RIGHT COLUMN: Golden Boot & Ballon d'Or - scrolls with page */}
+      <div className="w-full xl:w-[380px] flex flex-col gap-6 xl:gap-8 xl:sticky xl:top-6 xl:self-start pb-6 min-w-0 shrink-0">
         
         {/* WIDGET 1: DYNAMIC GOLDEN BOOT */}
         <div className="relative rounded-[20px] bg-[#0a1120]/80 border border-neonGold/30 backdrop-blur-md p-6 flex flex-col shrink-0 overflow-hidden shadow-[0_0_30px_rgba(0,0,0,0.5)]">
