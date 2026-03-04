@@ -3,7 +3,7 @@ import { db, storage } from '../firebase';
 import { collection, getDocs, addDoc, doc, updateDoc, deleteDoc, query, orderBy, increment } from 'firebase/firestore';
 import { verifyDeletePassword } from '../lib/security';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { Eye, Upload, Video, Image, Camera, X, Loader2, Film, Heart, MessageCircle, Share2, Trash2 } from 'lucide-react';
+import { Eye, Upload, Video, Image, Camera, X, Loader2, Film, Heart, MessageCircle, Share2, Trash2, PartyPopper } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { formatMatchDateTime, formatPolaroidDateTime, formatCountShort } from '../lib/utils';
 
@@ -492,10 +492,10 @@ export default function InsiderInsight() {
           <div>
             <div className="flex items-center gap-3 mb-1">
               <div className="p-2 rounded-2xl bg-yellow-500/10 border border-yellow-500/30">
-                <Eye className="w-6 h-6 text-yellow-500" />
+                <PartyPopper className="w-6 h-6 text-yellow-500" />
               </div>
               <h1 className="text-2xl md:text-3xl font-black italic uppercase tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-yellow-500 via-yellow-200 to-yellow-600">
-                Insider Insight
+                Celebrations and Clips
               </h1>
             </div>
             <p className="text-xs text-gray-400 font-medium">Behind-the-scenes clips & photos</p>
@@ -520,9 +520,9 @@ export default function InsiderInsight() {
           </div>
         ) : posts.length === 0 ? (
           <div className="rounded-3xl border border-white/10 bg-black/30 p-12 text-center">
-            <Film className="w-16 h-16 text-yellow-500/30 mx-auto mb-4" />
-            <p className="text-gray-500 font-semibold mb-2">No insider clips yet</p>
-            <p className="text-gray-600 text-sm mb-6">Be the first to share a behind-the-scenes moment</p>
+            <Film className="w-16 h-16 text-yellow-500/50 mx-auto mb-4" />
+            <p className="text-white/90 font-semibold mb-2">No insider clips yet</p>
+            <p className="text-gray-400 text-sm mb-6">Be the first to share a behind-the-scenes moment</p>
             <motion.button
               onClick={() => setShowUpload(true)}
               whileHover={{ scale: 1.02 }}
