@@ -70,15 +70,15 @@ const SocialIcons = {
 };
 
 const SHARE_PLATFORMS = [
-  { id: 'facebook', name: 'Facebook', url: (u, t) => `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(u)}`, Icon: SocialIcons.facebook },
-  { id: 'x', name: 'X (Twitter)', url: (u, t) => `https://twitter.com/intent/tweet?url=${encodeURIComponent(u)}&text=${encodeURIComponent(t)}`, Icon: SocialIcons.x },
-  { id: 'whatsapp', name: 'WhatsApp', url: (u, t) => `https://wa.me/?text=${encodeURIComponent(t + ' ' + u)}`, Icon: SocialIcons.whatsapp },
-  { id: 'instagram', name: 'Instagram', copyOnly: true, copyMessage: 'Link copied! Paste in Instagram to share', Icon: SocialIcons.instagram },
-  { id: 'tiktok', name: 'TikTok', copyOnly: true, copyMessage: 'Link copied! Paste in TikTok to share', Icon: SocialIcons.tiktok },
-  { id: 'snapchat', name: 'Snapchat', copyOnly: true, copyMessage: 'Link copied! Paste in Snapchat to share', Icon: SocialIcons.snapchat },
-  { id: 'linkedin', name: 'LinkedIn', url: (u, t) => `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(u)}`, Icon: SocialIcons.linkedin },
-  { id: 'telegram', name: 'Telegram', url: (u, t) => `https://telegram.me/share/url?url=${encodeURIComponent(u)}&text=${encodeURIComponent(t)}`, Icon: SocialIcons.telegram },
-  { id: 'reddit', name: 'Reddit', url: (u, t) => `https://www.reddit.com/submit?url=${encodeURIComponent(u)}&title=${encodeURIComponent(t)}`, Icon: SocialIcons.reddit },
+  { id: 'facebook', name: 'Facebook', color: '#1877F2', url: (u, t) => `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(u)}`, Icon: SocialIcons.facebook },
+  { id: 'x', name: 'X (Twitter)', color: '#1DA1F2', url: (u, t) => `https://twitter.com/intent/tweet?url=${encodeURIComponent(u)}&text=${encodeURIComponent(t)}`, Icon: SocialIcons.x },
+  { id: 'whatsapp', name: 'WhatsApp', color: '#25D366', url: (u, t) => `https://wa.me/?text=${encodeURIComponent(t + ' ' + u)}`, Icon: SocialIcons.whatsapp },
+  { id: 'instagram', name: 'Instagram', color: '#E4405F', copyOnly: true, copyMessage: 'Link copied! Paste in Instagram to share', Icon: SocialIcons.instagram },
+  { id: 'tiktok', name: 'TikTok', color: '#EE1D52', copyOnly: true, copyMessage: 'Link copied! Paste in TikTok to share', Icon: SocialIcons.tiktok },
+  { id: 'snapchat', name: 'Snapchat', color: '#FFFC00', copyOnly: true, copyMessage: 'Link copied! Paste in Snapchat to share', Icon: SocialIcons.snapchat },
+  { id: 'linkedin', name: 'LinkedIn', color: '#0A66C2', url: (u, t) => `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(u)}`, Icon: SocialIcons.linkedin },
+  { id: 'telegram', name: 'Telegram', color: '#26A5E4', url: (u, t) => `https://telegram.me/share/url?url=${encodeURIComponent(u)}&text=${encodeURIComponent(t)}`, Icon: SocialIcons.telegram },
+  { id: 'reddit', name: 'Reddit', color: '#FF4500', url: (u, t) => `https://www.reddit.com/submit?url=${encodeURIComponent(u)}&title=${encodeURIComponent(t)}`, Icon: SocialIcons.reddit },
 ];
 
 /** Get video duration from a File (for upload validation) */
@@ -377,7 +377,7 @@ export default function InsiderInsight() {
   const canUpload = selectedFile || recordingBlob;
 
   return (
-    <div className="relative min-h-screen flex flex-col w-full max-w-lg mx-auto pb-36 md:pb-28">
+    <div className="relative flex flex-col w-full pb-24 md:pb-16">
       {/* Header */}
       <div className="w-full mb-4 md:mb-6">
         <div className="flex items-center justify-between gap-4">
@@ -434,6 +434,10 @@ export default function InsiderInsight() {
                   index={i}
                   onView={recordView}
                   onExpand={() => setExpandedPost(post)}
+                  onLike={handleLike}
+                  onComment={() => setCommentPostId(post.id)}
+                  onShare={() => handleShare(post)}
+                  likedIds={likedIds}
                   formatDate={formatMatchDateTime}
                 />
               ))}
@@ -844,7 +848,7 @@ function ShareModal({ post, onClose }) {
                   whileTap={{ scale: 0.95 }}
                   className="flex flex-col items-center gap-2 p-4 rounded-2xl bg-white/5 border border-white/10 hover:border-yellow-500/40 transition-colors"
                 >
-                  <pf.Icon className="w-8 h-8 text-white" />
+                  <span style={{ color: pf.color }}><pf.Icon className="w-8 h-8" /></span>
                   <span className="text-xs font-bold text-white/90">{pf.name}</span>
                 </motion.button>
               ) : (
@@ -857,7 +861,7 @@ function ShareModal({ post, onClose }) {
                   whileTap={{ scale: 0.95 }}
                   className="flex flex-col items-center gap-2 p-4 rounded-2xl bg-white/5 border border-white/10 hover:border-yellow-500/40 transition-colors"
                 >
-                  <pf.Icon className="w-8 h-8 text-white" />
+                  <span style={{ color: pf.color }}><pf.Icon className="w-8 h-8" /></span>
                   <span className="text-xs font-bold text-white/90">{pf.name}</span>
                 </motion.a>
               )
@@ -897,10 +901,11 @@ function MediaLightboxVideo({ src }) {
   );
 }
 
-function InsiderPostCard({ post, index, onView, onExpand, formatDate }) {
+function InsiderPostCard({ post, index, onView, onExpand, onLike, onComment, onShare, likedIds, formatDate }) {
   const containerRef = useRef(null);
   const videoRef = useRef(null);
   const hasRecordedView = useRef(false);
+  const isLiked = likedIds?.has(post.id) ?? false;
 
   useEffect(() => {
     const el = containerRef.current;
@@ -943,27 +948,50 @@ function InsiderPostCard({ post, index, onView, onExpand, formatDate }) {
       )}
       {/* Gradient overlay */}
       <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-transparent pointer-events-none" />
-      {/* Right side actions – Reels/Instagram style */}
-      <div className="absolute right-2 bottom-14 flex flex-col items-center gap-3">
-        <div className="flex flex-col items-center gap-0.5">
+      {/* Right side actions – Views, Like, Comment, Share (clickable from card) */}
+      <div className="absolute right-2 bottom-14 flex flex-col items-center gap-3 pointer-events-none">
+        <div className="pointer-events-auto flex flex-col items-center gap-0.5">
           <Eye className="w-5 h-5 text-white drop-shadow-lg" />
           <span className="text-[10px] font-bold text-white drop-shadow-md">{viewCount}</span>
         </div>
-        <div className="flex flex-col items-center gap-0.5">
-          <Heart className="w-5 h-5 text-white drop-shadow-lg" />
+        <div
+          className="pointer-events-auto flex flex-col items-center gap-0.5 cursor-pointer"
+          onClick={(e) => {
+            e.stopPropagation();
+            onLike?.(post.id);
+          }}
+        >
+          <Heart className={`w-5 h-5 drop-shadow-lg ${isLiked ? 'text-red-500 fill-current' : 'text-white'}`} />
           <span className="text-[10px] font-bold text-white drop-shadow-md">{post.likeCount ?? 0}</span>
         </div>
-        <div className="flex flex-col items-center gap-0.5">
+        <div
+          className="pointer-events-auto flex flex-col items-center gap-0.5 cursor-pointer"
+          onClick={(e) => {
+            e.stopPropagation();
+            onComment?.();
+          }}
+        >
           <MessageCircle className="w-5 h-5 text-white drop-shadow-lg" />
           <span className="text-[10px] font-bold text-white drop-shadow-md">{post.commentCount ?? 0}</span>
         </div>
+        <div
+          className="pointer-events-auto flex flex-col items-center gap-0.5 cursor-pointer"
+          onClick={(e) => {
+            e.stopPropagation();
+            onShare?.();
+          }}
+        >
+          <Share2 className="w-5 h-5 text-white drop-shadow-lg" />
+        </div>
       </div>
-      {/* Bottom caption */}
+      {/* Bottom: caption, then subtle date/time below */}
       <div className="absolute bottom-0 left-0 right-0 p-3">
         {post.caption && (
           <p className="text-white text-xs font-medium line-clamp-2 drop-shadow-lg">{post.caption}</p>
         )}
-        <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mt-1">{formatDate(post.createdAt)}</p>
+        <p className="mt-1 text-[10px] text-gray-400 font-medium tracking-wide">
+          {formatDate(post.createdAt)}
+        </p>
       </div>
     </motion.article>
   );
