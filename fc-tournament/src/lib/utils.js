@@ -16,6 +16,19 @@ export function formatMatchDateTime(createdAt) {
   return `${date} · ${time}`;
 }
 
+/** Format for Polaroid label: "09/11/23  3:45 PM" */
+export function formatPolaroidDateTime(createdAt) {
+  if (!createdAt) return '';
+  const d = createdAt?.toDate ? createdAt.toDate() : new Date(createdAt);
+  if (isNaN(d.getTime())) return '';
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const yy = String(d.getFullYear()).slice(-2);
+  const date = `${dd}/${mm}/${yy}`;
+  const time = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+  return `${date}  ${time}`;
+}
+
 /** Title case: first letter uppercase, rest lowercase per word. */
 export function toTitleCase(str) {
   if (!str || typeof str !== 'string') return '';

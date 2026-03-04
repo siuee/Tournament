@@ -4,7 +4,7 @@ import { collection, getDocs, addDoc, doc, updateDoc, deleteDoc, query, orderBy,
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { Eye, Upload, Video, Image, Camera, X, Loader2, Film, Heart, MessageCircle, Share2, Trash2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { formatMatchDateTime } from '../lib/utils';
+import { formatMatchDateTime, formatPolaroidDateTime } from '../lib/utils';
 
 const MAX_VIDEO_SECONDS = 60;
 
@@ -359,6 +359,7 @@ export default function InsiderInsight() {
         mediaUrl,
         mediaType: isVideo ? 'video' : 'image',
         caption: caption?.trim() || '',
+        shareCaption: caption?.trim() || '',
         createdAt: new Date(),
         viewCount: 0,
         likeCount: 0,
@@ -426,7 +427,7 @@ export default function InsiderInsight() {
           </div>
         ) : (
           <>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 pb-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-14 md:gap-20 pb-14 pt-3">
               {posts.map((post, i) => (
                 <InsiderPostCard
                   key={post.id}
@@ -809,14 +810,26 @@ function CommentPanel({ postId, onClose, onAddComment, formatDate }) {
   );
 }
 
-/** Share modal – top 6 social platforms */
+/** Share modal – social platforms, with optional share caption synced to DB */
 function ShareModal({ post, onClose }) {
   if (!post) return null;
+  const [shareCaption, setShareCaption] = useState(post.shareCaption || post.caption || '');
   const shareUrl = typeof window !== 'undefined' ? window.location.href + '?insider=' + post.id : '';
-  const shareText = (post.caption || 'Check out this Insider clip!').slice(0, 100);
+  const shareText = (shareCaption || 'Check out this Insider clip!').slice(0, 160);
+
+  const persistCaption = async (value) => {
+    const trimmed = value?.trim() || '';
+    try {
+      await updateDoc(doc(db, 'insider_insights', post.id), { shareCaption: trimmed });
+    } catch (e) {
+      console.error('Failed to save share caption', e);
+    }
+  };
 
   const copyLink = (msg = 'Link copied!') => {
-    navigator.clipboard?.writeText(shareUrl).then(() => alert(msg)).catch(() => {});
+    persistCaption(shareCaption);
+    const payload = shareText ? `${shareText} ${shareUrl}` : shareUrl;
+    navigator.clipboard?.writeText(payload).then(() => alert(msg)).catch(() => {});
   };
 
   return (
@@ -834,9 +847,21 @@ function ShareModal({ post, onClose }) {
           className="bg-[#0a0a0c] border border-yellow-500/30 rounded-3xl p-6 max-w-sm w-full max-h-[85vh] overflow-y-auto"
           onClick={e => e.stopPropagation()}
         >
-          <div className="flex justify-between items-center mb-6">
+          <div className="flex justify-between items-center mb-4">
             <h3 className="font-black uppercase text-white">Share to</h3>
             <button onClick={onClose} className="p-2 text-gray-500 hover:text-white rounded-lg"><X className="w-5 h-5" /></button>
+          </div>
+          <div className="mb-5">
+            <label className="block text-[10px] font-black uppercase tracking-[0.18em] text-gray-400 mb-2">
+              Caption (optional)
+            </label>
+            <textarea
+              value={shareCaption}
+              onChange={(e) => setShareCaption(e.target.value)}
+              rows={2}
+              placeholder="Add a message to go with the link..."
+              className="w-full bg-black/40 border border-white/15 rounded-xl px-3 py-2 text-xs text-white placeholder:text-gray-600 focus:outline-none focus:border-yellow-500 resize-none"
+            />
           </div>
           <div className="grid grid-cols-3 gap-4">
             {SHARE_PLATFORMS.map(pf =>
@@ -859,6 +884,7 @@ function ShareModal({ post, onClose }) {
                   rel="noopener noreferrer"
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
+                  onClick={() => persistCaption(shareCaption)}
                   className="flex flex-col items-center gap-2 p-4 rounded-2xl bg-white/5 border border-white/10 hover:border-yellow-500/40 transition-colors"
                 >
                   <span style={{ color: pf.color }}><pf.Icon className="w-8 h-8" /></span>
@@ -923,6 +949,7 @@ function InsiderPostCard({ post, index, onView, onExpand, onLike, onComment, onS
   }, [post.id, onView]);
 
   const viewCount = post.viewCount ?? 0;
+  const [isHovering, setIsHovering] = useState(false);
 
   return (
     <motion.article
@@ -931,67 +958,170 @@ function InsiderPostCard({ post, index, onView, onExpand, onLike, onComment, onS
       animate={{ opacity: 1, scale: 1 }}
       transition={{ delay: index * 0.03 }}
       onClick={onExpand}
-      className="group relative aspect-[9/16] rounded-2xl overflow-hidden bg-black border border-white/10 hover:border-yellow-500/40 transition-colors cursor-pointer"
+      className="group relative aspect-[3/4] cursor-pointer"
     >
-      {post.mediaType === 'video' ? (
-        <video
-          ref={videoRef}
-          src={post.mediaUrl}
-          playsInline
-          muted
-          loop
-          preload="metadata"
-          className="w-full h-full object-cover pointer-events-none"
-        />
-      ) : (
-        <img src={post.mediaUrl} alt="" className="w-full h-full object-cover pointer-events-none" />
-      )}
-      {/* Gradient overlay */}
-      <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-transparent pointer-events-none" />
-      {/* Right side actions – Views, Like, Comment, Share (clickable from card) */}
-      <div className="absolute right-2 bottom-14 flex flex-col items-center gap-3 pointer-events-none">
-        <div className="pointer-events-auto flex flex-col items-center gap-0.5">
-          <Eye className="w-5 h-5 text-white drop-shadow-lg" />
-          <span className="text-[10px] font-bold text-white drop-shadow-md">{viewCount}</span>
+      {/* Back Polaroids – appear only on hover, one left and one right */}
+      <motion.div
+        className="absolute inset-0 flex"
+        style={{ transformOrigin: '50% 85%' }}
+        initial={{ x: 0, y: 0, rotate: 0, scale: 0.96, opacity: 0 }}
+        animate={{
+          x: isHovering ? -24 : 0,
+          y: isHovering ? -4 : 0,
+          rotate: isHovering ? -7 : 0,
+          scale: 0.96,
+          opacity: isHovering ? 0.9 : 0,
+        }}
+        transition={{ duration: 0.3, ease: 'easeInOut' }}
+      >
+        <div className="mx-auto w-full h-full bg-[#fdf7ec] rounded-xl border border-[#e2d4b7] shadow-[0_10px_26px_rgba(15,23,42,0.45)] flex flex-col px-3 pt-2 pb-4 opacity-80">
+          <div className="relative h-[68%] rounded-md overflow-hidden bg-black/5">
+            {post.mediaType === 'video' ? (
+              <video
+                src={post.mediaUrl}
+                playsInline
+                muted
+                loop
+                preload="metadata"
+                className="w-full h-full object-cover pointer-events-none scale-[1.03] opacity-70"
+              />
+            ) : (
+              <img
+                src={post.mediaUrl}
+                alt=""
+                className="w-full h-full object-cover pointer-events-none scale-[1.03] opacity-80"
+              />
+            )}
+          </div>
         </div>
+      </motion.div>
+      <motion.div
+        className="absolute inset-0 flex"
+        style={{ transformOrigin: '50% 85%' }}
+        initial={{ x: 0, y: 0, rotate: 0, scale: 0.96, opacity: 0 }}
+        animate={{
+          x: isHovering ? 24 : 0,
+          y: isHovering ? -4 : 0,
+          rotate: isHovering ? 7 : 0,
+          scale: 0.96,
+          opacity: isHovering ? 0.9 : 0,
+        }}
+        transition={{ duration: 0.3, ease: 'easeInOut' }}
+      >
+        <div className="mx-auto w-full h-full bg-[#fdf7ec] rounded-xl border border-[#e2d4b7] shadow-[0_10px_26px_rgba(15,23,42,0.45)] flex flex-col px-3 pt-2 pb-4 opacity-80">
+          <div className="relative h-[68%] rounded-md overflow-hidden bg-black/5">
+            {post.mediaType === 'video' ? (
+              <video
+                src={post.mediaUrl}
+                playsInline
+                muted
+                loop
+                preload="metadata"
+                className="w-full h-full object-cover pointer-events-none scale-[1.03] opacity-70"
+              />
+            ) : (
+              <img
+                src={post.mediaUrl}
+                alt=""
+                className="w-full h-full object-cover pointer-events-none scale-[1.03] opacity-80"
+              />
+            )}
+          </div>
+        </div>
+      </motion.div>
+
+      {/* Front Polaroid – main interactive card */}
+      <motion.div
+        className="absolute inset-0 flex"
+        style={{ transformOrigin: '50% 85%' }}
+        initial={{ x: 0, y: 0, rotate: 0, scale: 1 }}
+        animate={{
+          x: 0,
+          y: isHovering ? -2 : 0,
+          rotate: isHovering ? 2 : 0,
+          scale: isHovering ? 1.02 : 1,
+        }}
+        transition={{ duration: 0.3, ease: 'easeInOut' }}
+        onMouseEnter={() => setIsHovering(true)}
+        onMouseLeave={() => setIsHovering(false)}
+        onTouchStart={() => setIsHovering(true)}
+        onTouchEnd={() => setIsHovering(false)}
+        onTouchCancel={() => setIsHovering(false)}
+      >
+        <div className="mx-auto w-full h-full bg-[#fdf7ec] rounded-xl border border-[#e2d4b7] shadow-[0_14px_30px_rgba(15,23,42,0.55)] flex flex-col px-3 pt-2 pb-4">
+          {/* Photo area */}
+          <div className="relative h-[68%] rounded-md overflow-hidden bg-black/5">
+            {post.mediaType === 'video' ? (
+              <video
+                ref={videoRef}
+                src={post.mediaUrl}
+                playsInline
+                muted
+                loop
+                preload="metadata"
+                className="w-full h-full object-cover pointer-events-none"
+              />
+            ) : (
+              <img src={post.mediaUrl} alt="" className="w-full h-full object-cover pointer-events-none" />
+            )}
+            {/* Views pill */}
+            <div className="absolute top-2 left-2 flex items-center gap-1 rounded-full bg-black/65 px-2 py-0.5">
+              <Eye className="w-3.5 h-3.5 text-white" />
+              <span className="text-[9px] font-semibold text-white">{viewCount}</span>
+            </div>
+          </div>
+          {/* Caption + date beneath photo, like handwritten Polaroid label */}
+          <div className="flex-1 mt-3 flex flex-col justify-end">
+            {post.caption && (
+              <p
+                className="text-[11px] text-stone-900 line-clamp-2"
+                style={{ fontFamily: '"Permanent Marker", system-ui, cursive', letterSpacing: '0.04em' }}
+              >
+                {post.caption}
+              </p>
+            )}
+            <p
+              className="mt-1 text-[10px] text-stone-700"
+              style={{ fontFamily: '"Permanent Marker", system-ui, cursive', letterSpacing: '0.08em' }}
+            >
+              {formatPolaroidDateTime(post.createdAt)}
+            </p>
+          </div>
+        </div>
+      </motion.div>
+
+      {/* Floating actions on the right edge – Like / Comment / Share */}
+      <div className="absolute -right-3 bottom-10 flex flex-col items-center gap-2 z-10 pointer-events-none">
         <div
-          className="pointer-events-auto flex flex-col items-center gap-0.5 cursor-pointer"
+          className="pointer-events-auto flex items-center justify-center w-9 h-9 rounded-full bg-white shadow-md cursor-pointer"
           onClick={(e) => {
             e.stopPropagation();
             onLike?.(post.id);
           }}
         >
-          <Heart className={`w-5 h-5 drop-shadow-lg ${isLiked ? 'text-red-500 fill-current' : 'text-white'}`} />
-          <span className="text-[10px] font-bold text-white drop-shadow-md">{post.likeCount ?? 0}</span>
+          <Heart className={`w-4.5 h-4.5 ${isLiked ? 'text-red-500 fill-current' : 'text-slate-800'}`} />
+        </div>
+        <div className="pointer-events-none text-[9px] font-semibold text-slate-900">
+          {post.likeCount ?? 0}
         </div>
         <div
-          className="pointer-events-auto flex flex-col items-center gap-0.5 cursor-pointer"
+          className="pointer-events-auto flex items-center justify-center w-9 h-9 rounded-full bg-white shadow-md cursor-pointer"
           onClick={(e) => {
             e.stopPropagation();
             onComment?.();
           }}
         >
-          <MessageCircle className="w-5 h-5 text-white drop-shadow-lg" />
-          <span className="text-[10px] font-bold text-white drop-shadow-md">{post.commentCount ?? 0}</span>
+          <MessageCircle className="w-4.5 h-4.5 text-slate-800" />
         </div>
         <div
-          className="pointer-events-auto flex flex-col items-center gap-0.5 cursor-pointer"
+          className="pointer-events-auto flex items-center justify-center w-9 h-9 rounded-full bg-white shadow-md cursor-pointer"
           onClick={(e) => {
             e.stopPropagation();
             onShare?.();
           }}
         >
-          <Share2 className="w-5 h-5 text-white drop-shadow-lg" />
+          <Share2 className="w-4.5 h-4.5 text-slate-800" />
         </div>
-      </div>
-      {/* Bottom: caption, then subtle date/time below */}
-      <div className="absolute bottom-0 left-0 right-0 p-3">
-        {post.caption && (
-          <p className="text-white text-xs font-medium line-clamp-2 drop-shadow-lg">{post.caption}</p>
-        )}
-        <p className="mt-1 text-[10px] text-gray-400 font-medium tracking-wide">
-          {formatDate(post.createdAt)}
-        </p>
       </div>
     </motion.article>
   );
