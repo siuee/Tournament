@@ -1,7 +1,8 @@
 import { useState, useMemo, useEffect, lazy, Suspense } from 'react';
-import { Trophy, Shield, Gamepad2, Sun, Moon, Activity, Droplets, Flame, Sparkles, Leaf } from 'lucide-react';
+import { Trophy, Shield, Gamepad2, Sun, Moon, Activity, Droplets, Flame, Sparkles, Leaf, Eye } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import LockerRoom from './components/LockerRoom';
+import InsiderInsight from './components/InsiderInsight';
 import Standings from './components/Standings'; 
 import MatchDay from './components/MatchDay';
 import { AnimatedSocialIcons } from './components/ui/floating-action-button';
@@ -195,6 +196,7 @@ function App() {
               <div className="flex items-center gap-1">
                 <NavBtn icon={<Activity size={16}/>} label="Standings" active={activeTab === 'standings'} onClick={() => setActiveTab('standings')} />
                 <NavBtn icon={<Gamepad2 size={16}/>} label="Match Day" active={activeTab === 'match'} onClick={() => setActiveTab('match')} />
+                <NavBtn icon={<Eye size={16}/>} label="Insider" active={activeTab === 'insider'} onClick={() => setActiveTab('insider')} />
                 <NavBtn icon={<Shield size={16}/>} label="Club" active={activeTab === 'locker'} onClick={() => setActiveTab('locker')} />
               </div>
             </div>
@@ -214,6 +216,7 @@ function App() {
             >
               {activeTab === 'standings' && <Standings />}
               {activeTab === 'match' && <MatchDay />}
+              {activeTab === 'insider' && <InsiderInsight />}
               {activeTab === 'locker' && <LockerRoom />}
             </motion.div>
           </AnimatePresence>
@@ -230,6 +233,7 @@ function App() {
           >
             <MobTab icon={<Activity />} label="RANK" active={activeTab === 'standings'} onClick={() => setActiveTab('standings')} />
             <MobTab icon={<Gamepad2 />} label="PLAY" active={activeTab === 'match'} onClick={() => setActiveTab('match')} />
+            <MobTab icon={<Eye />} label="INSIDER" active={activeTab === 'insider'} onClick={() => setActiveTab('insider')} />
             <MobTab icon={<Shield />} label="CLUB" active={activeTab === 'locker'} onClick={() => setActiveTab('locker')} />
           </motion.div>
         </nav>
