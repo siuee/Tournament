@@ -421,8 +421,8 @@ export default function MatchDay({ onGoalScored }) {
                     {team.playerData?.map((p, idx) => (
                       <div key={idx} className="flex items-center gap-2">
                         <span className="font-sport text-xs sm:text-sm font-semibold text-yellow-500">{toTitleCase(p?.name || '').split(' ')[0]}</span>
-                        <span className="text-[9px] font-bold text-gray-400 flex items-center gap-1"><Goal className="w-3 h-3 text-white/40"/> {p.tournamentGoals || 0}</span>
-                        <span className="text-[9px] font-bold text-gray-400 flex items-center gap-1"><Star className="w-3 h-3 text-white/40"/> {p.tournamentAssists || 0}</span>
+                        <span className="text-[9px] font-bold text-gray-400 flex items-center gap-1"><span className="text-[10px] leading-none">⚽</span> {p.tournamentGoals || 0}</span>
+                        <span className="text-[9px] font-bold text-gray-400 flex items-center gap-1"><span className="text-[10px] leading-none">👟</span> {p.tournamentAssists || 0}</span>
                       </div>
                     ))}
                   </div>
@@ -500,7 +500,7 @@ export default function MatchDay({ onGoalScored }) {
                             {p.goals != null && (
                               <>
                                 <span className="text-yellow-500/70">×</span>
-                                <Goal className="w-2.5 h-2.5 text-yellow-500/80 shrink-0" />
+                                <span className="text-[10px] leading-none" title="Goals">⚽</span>
                                 <span className="text-yellow-400 font-black">{p.goals}</span>
                               </>
                             )}
@@ -528,7 +528,7 @@ export default function MatchDay({ onGoalScored }) {
                             {p.goals != null && (
                               <>
                                 <span className="text-yellow-500/70">×</span>
-                                <Goal className="w-2.5 h-2.5 text-yellow-500/80 shrink-0" />
+                                <span className="text-[10px] leading-none" title="Goals">⚽</span>
                                 <span className="text-yellow-400 font-black">{p.goals}</span>
                               </>
                             )}

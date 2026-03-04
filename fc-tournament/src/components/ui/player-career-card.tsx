@@ -1,6 +1,6 @@
 import * as React from "react";
 import { cn, toTitleCase } from "@/lib/utils";
-import { Goal, User, Users, Zap } from "lucide-react";
+import { Users } from "lucide-react";
 
 export interface PlayerCareerCardProps extends React.HTMLAttributes<HTMLDivElement> {
   player: {
@@ -94,17 +94,17 @@ const PlayerCareerCard = React.forwardRef<HTMLDivElement, PlayerCareerCardProps>
             {/* Stats Row */}
             <div className="mt-6 grid grid-cols-3 gap-2 text-center">
               <div className="bg-black/30 backdrop-blur-sm rounded-lg px-2 py-2.5 border border-white/10">
-                <User className="h-4 w-4 mx-auto mb-0.5 text-[#00ff88]" />
+                <span className="text-base leading-none block mb-0.5">⚽</span>
                 <p className="text-lg font-black leading-none">{g1}</p>
                 <p className="text-[10px] text-white/70 uppercase tracking-widest mt-0.5">1v1 Gls</p>
               </div>
               <div className="bg-black/30 backdrop-blur-sm rounded-lg px-2 py-2.5 border border-white/10">
-                <Goal className="h-4 w-4 mx-auto mb-0.5 text-cyan-400" />
+                <span className="text-base leading-none block mb-0.5">⚽</span>
                 <p className="text-lg font-black leading-none">{g2}</p>
                 <p className="text-[10px] text-white/70 uppercase tracking-widest mt-0.5">2v2 Gls</p>
               </div>
               <div className="bg-black/30 backdrop-blur-sm rounded-lg px-2 py-2.5 border border-white/10">
-                <Zap className="h-4 w-4 mx-auto mb-0.5 text-amber-400" />
+                <span className="text-base leading-none block mb-0.5">👟</span>
                 <p className="text-lg font-black leading-none">{a2}</p>
                 <p className="text-[10px] text-white/70 uppercase tracking-widest mt-0.5">2v2 Ast</p>
               </div>

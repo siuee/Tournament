@@ -304,10 +304,13 @@ export default function Standings() {
                       <p className="text-xs text-yellow-500 font-bold uppercase tracking-widest mt-1">Top Scorer</p>
                     </div>
                     <div className="text-right">
-                      <motion.p initial={{ scale: 0.5 }} animate={{ scale: 1 }} transition={{ type: "spring", stiffness: 200, delay: 0.5 }} className="text-4xl font-black italic text-neonGold drop-shadow-[0_2px_10px_rgba(234,179,8,0.3)]">
-                        {gbFormat === '1v1' ? (activeGBPlayers[0].goals1v1 || 0) : (activeGBPlayers[0].goals2v2 || 0)}
-                      </motion.p>
-                      <p className="text-xs text-gray-500 font-bold uppercase tracking-widest">Goals</p>
+                      <div className="flex items-center justify-end gap-2">
+                        <span className="text-2xl leading-none">⚽</span>
+                        <motion.p initial={{ scale: 0.5 }} animate={{ scale: 1 }} transition={{ type: "spring", stiffness: 200, delay: 0.5 }} className="text-4xl font-black italic text-neonGold drop-shadow-[0_2px_10px_rgba(234,179,8,0.3)]">
+                          {gbFormat === '1v1' ? (activeGBPlayers[0].goals1v1 || 0) : (activeGBPlayers[0].goals2v2 || 0)}
+                        </motion.p>
+                      </div>
+                      <p className="text-xs text-gray-500 font-bold uppercase tracking-widest mt-1">Goals</p>
                     </div>
                   </div>
                 </motion.div>
@@ -322,7 +325,7 @@ export default function Standings() {
                     </div>
                     <p className="font-sport font-semibold text-sm text-gray-300 truncate w-full mb-1">{toTitleCase(activeGBPlayers[idx]?.name || '').split(' ')[0]}</p>
                     <div className="flex items-center gap-1.5 bg-black/40 px-3 py-1 rounded-full border border-white/5">
-                      <Goal className={`w-3 h-3 ${idx === 1 ? 'text-gray-400' : 'text-orange-500'}`} />
+                      <span className={`text-xs leading-none ${idx === 1 ? 'opacity-70' : ''}`}>⚽</span>
                       <span className="font-black italic text-sm text-white">{gbFormat === '1v1' ? (activeGBPlayers[idx].goals1v1 || 0) : (activeGBPlayers[idx].goals2v2 || 0)}</span>
                     </div>
                   </motion.div>
@@ -342,7 +345,14 @@ export default function Standings() {
                         <p className="font-sport font-semibold text-base text-gray-400 truncate max-w-[100px]">{toTitleCase(player?.name || '').split(' ')[0]}</p>
                       </div>
                       <div className="flex items-center gap-1.5 px-2">
+                        <span className="text-xs leading-none">⚽</span>
                         <span className="font-black italic text-sm text-gray-300">{gbFormat === '1v1' ? (player.goals1v1 || 0) : (player.goals2v2 || 0)}</span>
+                        {gbFormat === '2v2' && (
+                          <>
+                            <span className="text-xs leading-none text-gray-500">👟</span>
+                            <span className="font-black italic text-sm text-gray-400">{(player.assists2v2 || 0)}</span>
+                          </>
+                        )}
                       </div>
                     </motion.div>
                   ))}
