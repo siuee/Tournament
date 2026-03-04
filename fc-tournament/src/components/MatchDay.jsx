@@ -5,7 +5,7 @@ import { collection, getDocs, addDoc, deleteDoc, doc, updateDoc, query, where, o
 import { Plus, Users, User, X, Trash2, Goal, Star, Trophy, Sword, AlertCircle, History, UserPlus, Edit2, Loader2 } from 'lucide-react';
 import { AnimatedDropdown } from './ui/dropdown-01';
 import { motion, AnimatePresence } from 'framer-motion';
-import { toTitleCase, formatTeamDisplay, formatMatchHistoryTeam, matchTeamToMatch, calculateOvrFromGoalsAssists } from '../lib/utils';
+import { toTitleCase, formatTeamDisplay, formatMatchHistoryTeam, formatMatchDateTime, matchTeamToMatch, calculateOvrFromGoalsAssists } from '../lib/utils';
 import { TeamDisplay } from './TeamDisplay';
 import { verifyDeletePassword } from '../lib/security';
 
@@ -547,6 +547,11 @@ export default function MatchDay({ onGoalScored }) {
                   <p className="text-[8px] sm:text-[9px] font-black text-gray-500 uppercase mt-2 tracking-[0.2em]">
                     {m.tournamentType.replace('e', '')}
                   </p>
+                  {m.createdAt && (
+                    <p className="text-[8px] sm:text-[9px] font-semibold text-gray-600 uppercase mt-1 tracking-widest">
+                      {formatMatchDateTime(m.createdAt)}
+                    </p>
+                  )}
                 </div>
               </div>
             );

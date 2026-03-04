@@ -358,9 +358,11 @@ export default function LockerRoom() {
                       </div>
 
                       {/* CLUB RANK BADGE */}
-                      <div className="absolute top-4 right-3 md:top-5 md:right-4 flex flex-col items-center z-20 opacity-60 group-hover:opacity-100 transition-opacity">
-                        <span className="text-[10px] font-black uppercase tracking-widest text-yellow-500 leading-none mb-0.5">Rank</span>
-                        <span className="text-sm font-black text-white italic">#{idx + 1}</span>
+                      <div className="absolute top-4 right-3 md:top-5 md:right-4 flex flex-col items-center z-20">
+                        <div className="flex flex-col items-center justify-center min-w-[36px] px-2 py-1 rounded-lg bg-black/80 backdrop-blur-sm border border-yellow-500/60 shadow-[0_0_12px_rgba(234,179,8,0.3)] group-hover:border-yellow-400 group-hover:shadow-[0_0_16px_rgba(234,179,8,0.5)] transition-all">
+                          <span className="text-[9px] font-black uppercase tracking-[0.2em] text-yellow-400 leading-none mb-0.5 drop-shadow-[0_0_6px_rgba(234,179,8,0.6)]">Rank</span>
+                          <span className="text-base font-black text-yellow-300 italic leading-none drop-shadow-[0_0_8px_rgba(234,179,8,0.5)]">#{idx + 1}</span>
+                        </div>
                       </div>
 
                       {/* CENTER PLAYER VIDEO (Faded Mask) */}

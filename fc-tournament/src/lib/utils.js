@@ -6,6 +6,16 @@ export function cn(...inputs) {
   return inputs.filter(Boolean).join(' ');
 }
 
+/** Format Firestore createdAt for display: "Mar 2, 2025 · 3:45 PM" */
+export function formatMatchDateTime(createdAt) {
+  if (!createdAt) return '';
+  const d = createdAt?.toDate ? createdAt.toDate() : new Date(createdAt);
+  if (isNaN(d.getTime())) return '';
+  const date = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  const time = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+  return `${date} · ${time}`;
+}
+
 /** Title case: first letter uppercase, rest lowercase per word. */
 export function toTitleCase(str) {
   if (!str || typeof str !== 'string') return '';
