@@ -1,8 +1,9 @@
 import { useState, useMemo, useEffect, lazy, Suspense } from 'react';
-import { Trophy, Shield, Gamepad2, Sun, Moon, Activity, Droplets, Flame, Sparkles, Leaf, PartyPopper } from 'lucide-react';
+import { Trophy, Shield, Gamepad2, Sun, Moon, Activity, Droplets, Flame, Sparkles, Leaf, PartyPopper, TicketPercent } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import LockerRoom from './components/LockerRoom';
 import InsiderInsight from './components/InsiderInsight';
+import Betting from './components/Betting';
 import Standings from './components/Standings'; 
 import MatchDay from './components/MatchDay';
 import { AnimatedSocialIcons } from './components/ui/floating-action-button';
@@ -189,26 +190,29 @@ function App() {
           </defs>
         </svg>
         {/* --- DESKTOP CURVED NAVBAR --- */}
-        <nav className="hidden md:flex fixed top-4 left-1/2 -translate-x-1/2 z-[100] w-full max-w-4xl px-4 justify-center">
+        <nav className="hidden md:flex fixed top-4 left-1/2 -translate-x-1/2 z-[100] w-full max-w-5xl px-2 lg:px-4 justify-center">
           <motion.div 
             initial={{ y: -100 }} animate={{ y: 0 }}
             className="relative w-full pt-1 bg-[#0a0a0c]/95 backdrop-blur-xl border border-white/10 rounded-[28px] shadow-[0_20px_50px_rgba(0,0,0,0.4)]"
             style={{ clipPath: 'url(#navbar-curve)' }}
           >
-            <div className="px-6 lg:px-12 py-5 flex justify-between items-center max-w-7xl mx-auto">
+            <div className="px-4 lg:px-8 py-4 flex justify-between items-center gap-4 max-w-7xl mx-auto">
               {/* Logo */}
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2 lg:gap-3 min-w-0">
                 <div className="text-yellow-500 drop-shadow-[0_0_10px_rgba(234,179,8,0.5)]"><BananaIcon className="w-8 h-8" /></div>
                 <div className="flex flex-col">
-                  <h1 className="text-xl font-black italic tracking-tighter uppercase leading-none text-white">Banana <span className="text-yellow-500">FC</span></h1>
+                  <h1 className="text-lg lg:text-xl font-black italic tracking-tighter uppercase leading-none text-white line-clamp-1">
+                    Banana <span className="text-yellow-500">FC</span>
+                  </h1>
                   <span className="text-[7px] font-black tracking-[0.3em] text-gray-500 uppercase">Tournament Hub</span>
                 </div>
               </div>
               {/* Nav links */}
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-1 sm:gap-1.5 md:gap-2 flex-wrap justify-end">
                 <NavBtn icon={<Activity size={16}/>} label="Standings" active={activeTab === 'standings'} onClick={() => setActiveTab('standings')} />
                 <NavBtn icon={<Gamepad2 size={16}/>} label="Match Day" active={activeTab === 'match'} onClick={() => setActiveTab('match')} />
                 <NavBtn icon={<PartyPopper size={16}/>} label="Celebration" active={activeTab === 'insider'} onClick={() => setActiveTab('insider')} />
+                <NavBtn icon={<TicketPercent size={16}/>} label="Betting" active={activeTab === 'betting'} onClick={() => setActiveTab('betting')} />
                 <NavBtn icon={<Shield size={16}/>} label="Club" active={activeTab === 'locker'} onClick={() => setActiveTab('locker')} />
               </div>
             </div>
@@ -229,6 +233,7 @@ function App() {
               {activeTab === 'standings' && <Standings />}
               {activeTab === 'match' && <MatchDay />}
               {activeTab === 'insider' && <InsiderInsight />}
+              {activeTab === 'betting' && <Betting />}
               {activeTab === 'locker' && <LockerRoom />}
             </motion.div>
           </AnimatePresence>
@@ -248,6 +253,7 @@ function App() {
             <MobTab icon={<Activity />} label="RANK" active={activeTab === 'standings'} onClick={() => setActiveTab('standings')} />
             <MobTab icon={<Gamepad2 />} label="PLAY" active={activeTab === 'match'} onClick={() => setActiveTab('match')} />
             <MobTab icon={<PartyPopper />} label="CELEBRATE" active={activeTab === 'insider'} onClick={() => setActiveTab('insider')} />
+            <MobTab icon={<TicketPercent />} label="BET" active={activeTab === 'betting'} onClick={() => setActiveTab('betting')} />
             <MobTab icon={<Shield />} label="CLUB" active={activeTab === 'locker'} onClick={() => setActiveTab('locker')} />
           </motion.div>
         </nav>
