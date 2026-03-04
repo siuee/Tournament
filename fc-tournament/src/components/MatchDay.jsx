@@ -493,7 +493,7 @@ export default function MatchDay({ onGoalScored }) {
                       {formatMatchHistoryTeam(homeTeamObj, m.homeTeam)}
                     </span>
                     {homePlayers.length > 0 && (
-                      <div className="flex flex-wrap gap-x-3 gap-y-0.5 justify-center sm:justify-start text-[9px] sm:text-[10px]">
+                      <div className="flex flex-col gap-y-1 justify-center sm:justify-start text-[9px] sm:text-[10px]">
                         {homePlayers.map((p, i) => (
                           <span key={i} className="inline-flex items-center gap-1 text-gray-400 font-semibold tracking-wide">
                             <span className="text-yellow-500/90">{toTitleCase(p.name?.split(' ')[0] || '')}</span>
@@ -521,7 +521,7 @@ export default function MatchDay({ onGoalScored }) {
                       {formatMatchHistoryTeam(awayTeamObj, m.awayTeam)}
                     </span>
                     {awayPlayers.length > 0 && (
-                      <div className="flex flex-wrap gap-x-3 gap-y-0.5 justify-center sm:justify-end text-[9px] sm:text-[10px]">
+                      <div className="flex flex-col gap-y-1 justify-center sm:justify-end text-[9px] sm:text-[10px]">
                         {awayPlayers.map((p, i) => (
                           <span key={i} className="inline-flex items-center gap-1 text-gray-400 font-semibold tracking-wide">
                             <span className="text-yellow-500/90">{toTitleCase(p.name?.split(' ')[0] || '')}</span>
