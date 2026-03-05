@@ -1699,43 +1699,42 @@ export default function Betting() {
           />
         ) : (
           <>
-            {/* Date selector / calendar bar */}
+            {/* Date selector / calendar bar — centered */}
             <div className="flex flex-col gap-2 rounded-3xl border border-white/10 bg-[#050509]/80 px-3 sm:px-4 py-2.5 shadow-[0_0_24px_rgba(0,0,0,0.55)]">
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => changeDay(-1)}
-                    className="p-1.5 rounded-full bg-white/5 hover:bg-white/15 border border-white/10 text-gray-200"
-                  >
-                    <ChevronLeft className="w-4 h-4" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setShowCalendar((prev) => !prev)}
-                    title={formattedSelectedDate}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/5 hover:bg-white/15 border border-white/10 text-[11px] font-semibold text-gray-100"
-                  >
-                    <CalendarDays className="w-3.5 h-3.5 text-yellow-400" />
-                    <span>Calendar</span>
-                    <ChevronDown className={`w-3 h-3 text-gray-400 transition-transform ${showCalendar ? 'rotate-180' : ''}`} />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => changeDay(1)}
-                    className="p-1.5 rounded-full bg-white/5 hover:bg-white/15 border border-white/10 text-gray-200"
-                  >
-                    <ChevronRight className="w-4 h-4" />
-                  </button>
-                </div>
+              <div className="flex items-center justify-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => changeDay(-1)}
+                  className="p-1.5 rounded-full bg-white/5 hover:bg-white/15 border border-white/10 text-gray-200"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowCalendar((prev) => !prev)}
+                  title={formattedSelectedDate}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/5 hover:bg-white/15 border border-white/10 text-[11px] font-semibold text-gray-100"
+                >
+                  <CalendarDays className="w-3.5 h-3.5 text-yellow-400" />
+                  <span>Calendar</span>
+                  <ChevronDown className={`w-3 h-3 text-gray-400 transition-transform ${showCalendar ? 'rotate-180' : ''}`} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => changeDay(1)}
+                  className="p-1.5 rounded-full bg-white/5 hover:bg-white/15 border border-white/10 text-gray-200"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
               </div>
 
               {showCalendar && (
-                <div className="flex justify-center">
-                  <div className="w-full max-w-md">
+                <div className="flex justify-center w-full">
+                  <div className="w-full max-w-sm mx-auto">
                     <CalendarGrid
                       selectedDate={selectedDate}
                       tournaments={tournaments}
+                      playedMatches={playedMatches}
                       onSelectDate={(date) => {
                         const d = new Date(date);
                         d.setHours(0, 0, 0, 0);
@@ -4133,23 +4132,42 @@ function BetSlipCard({ betslip, stake, totals, onToggleSelection, onStakeChange,
   );
 }
 
-function CalendarGrid({ selectedDate, tournaments, onSelectDate }) {
-  const base = new Date(selectedDate);
-  base.setDate(1);
-  base.setHours(0, 0, 0, 0);
+const CALENDAR_MONTHS = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
 
-  const month = base.getMonth();
-  const year = base.getFullYear();
+function CalendarGrid({ selectedDate, tournaments, playedMatches = [], onSelectDate }) {
+  const isSameDay = (a, b) =>
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate();
 
-  const startDay = base.getDay(); // 0 (Sun) - 6 (Sat)
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  // View month/year (what the grid displays); sync from selectedDate when it changes
+  const [viewDate, setViewDate] = useState(() => {
+    const d = new Date(selectedDate);
+    d.setDate(1);
+    d.setHours(0, 0, 0, 0);
+    return d;
+  });
+
+  useEffect(() => {
+    const d = new Date(selectedDate);
+    d.setDate(1);
+    d.setHours(0, 0, 0, 0);
+    setViewDate(d);
+  }, [selectedDate]);
+
+  const viewMonth = viewDate.getMonth();
+  const viewYear = viewDate.getFullYear();
+  const firstOfMonth = new Date(viewYear, viewMonth, 1);
+  const startDay = firstOfMonth.getDay();
+  const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
 
   const cells = [];
-  for (let i = 0; i < startDay; i += 1) {
-    cells.push(null);
-  }
+  for (let i = 0; i < startDay; i += 1) cells.push(null);
   for (let day = 1; day <= daysInMonth; day += 1) {
-    cells.push(new Date(year, month, day));
+    cells.push(new Date(viewYear, viewMonth, day));
   }
 
   const hasFixturesOn = (date) => {
@@ -4157,25 +4175,92 @@ function CalendarGrid({ selectedDate, tournaments, onSelectDate }) {
     return tournaments.some((t) => generateLeagueFixtures(t, date).length > 0);
   };
 
-  const isSameDay = (a, b) => {
-    return (
-      a.getFullYear() === b.getFullYear() &&
-      a.getMonth() === b.getMonth() &&
-      a.getDate() === b.getDate()
-    );
+  // Set of timestamps (midnight) for dates that have a played match (from MatchDay)
+  const playedMatchDates = useMemo(() => {
+    const set = new Set();
+    if (!Array.isArray(playedMatches)) return set;
+    playedMatches.forEach((m) => {
+      const raw = m.createdAt;
+      const d = raw?.toDate ? raw.toDate() : (raw ? new Date(raw) : null);
+      if (d && !Number.isNaN(d.getTime())) {
+        const midnight = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+        set.add(midnight.getTime());
+      }
+    });
+    return set;
+  }, [playedMatches]);
+
+  const hasPlayedMatchOn = (date) => {
+    const midnight = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    return playedMatchDates.has(midnight.getTime());
   };
 
-  const monthLabel = base.toLocaleDateString(undefined, {
-    month: 'long',
-    year: 'numeric',
-  });
+  const goPrevMonth = () => {
+    setViewDate(new Date(viewYear, viewMonth - 1, 1));
+  };
+  const goNextMonth = () => {
+    setViewDate(new Date(viewYear, viewMonth + 1, 1));
+  };
+  const handleMonthChange = (e) => {
+    const month = parseInt(e.target.value, 10);
+    setViewDate(new Date(viewYear, month, 1));
+  };
+  const handleYearChange = (e) => {
+    const year = parseInt(e.target.value, 10);
+    setViewDate(new Date(year, viewMonth, 1));
+  };
+
+  const yearRange = [];
+  const currentYear = new Date().getFullYear();
+  for (let y = currentYear - 5; y <= currentYear + 2; y += 1) yearRange.push(y);
 
   const weekDays = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
   return (
-    <div className="mt-2 rounded-2xl border border-white/10 bg-black/60 p-3 sm:p-4">
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-xs font-semibold text-gray-200">{monthLabel}</span>
+    <div className="betting-calendar-grid mt-2 rounded-2xl border border-white/10 bg-black/60 p-3 sm:p-4">
+      <div className="flex items-center justify-between gap-1 mb-2">
+        <button
+          type="button"
+          onClick={goPrevMonth}
+          className="p-1 rounded-full hover:bg-white/10 text-gray-300 hover:text-white"
+          aria-label="Previous month"
+        >
+          <ChevronLeft className="h-4 w-4" />
+        </button>
+        <div className="flex items-center gap-1 sm:gap-2 flex-1 justify-center min-w-0">
+          <select
+            value={viewMonth}
+            onChange={handleMonthChange}
+            className="bg-slate-900 border border-white/20 rounded-lg px-2 py-1 text-[11px] sm:text-xs font-medium text-gray-200 focus:outline-none focus:ring-1 focus:ring-yellow-500/50 [&_option]:bg-slate-900 [&_option]:text-gray-200"
+          >
+            {CALENDAR_MONTHS.map((name, i) => (
+              <option key={i} value={i}>
+                {name}
+              </option>
+            ))}
+          </select>
+          <select
+            value={viewYear}
+            onChange={handleYearChange}
+            className="bg-slate-900 border border-white/20 rounded-lg px-2 py-1 text-[11px] sm:text-xs font-medium text-gray-200 focus:outline-none focus:ring-1 focus:ring-yellow-500/50 [&_option]:bg-slate-900 [&_option]:text-gray-200"
+          >
+            {yearRange.map((y) => (
+              <option key={y} value={y}>
+                {y}
+              </option>
+            ))}
+          </select>
+        </div>
+        <button
+          type="button"
+          onClick={goNextMonth}
+          className="p-1 rounded-full hover:bg-white/10 text-gray-300 hover:text-white"
+          aria-label="Next month"
+        >
+          <ChevronRight className="h-4 w-4" />
+        </button>
+      </div>
+      <div className="flex justify-end mb-1">
         <button
           type="button"
           onClick={() => onSelectDate(new Date())}
@@ -4198,20 +4283,31 @@ function CalendarGrid({ selectedDate, tournaments, onSelectDate }) {
           }
           const selected = isSameDay(date, selectedDate);
           const hasFixtures = hasFixturesOn(date);
+          const hasPlayed = hasPlayedMatchOn(date);
 
           return (
             <button
               key={date.toISOString()}
               type="button"
               onClick={() => onSelectDate(date)}
-              className={`relative flex items-center justify-center h-7 rounded-full text-[11px] ${
+              className={`relative flex flex-col items-center justify-center h-8 w-8 rounded-full text-[11px] ${
                 selected
                   ? 'bg-yellow-500 text-black font-semibold'
                   : 'bg-white/5 text-gray-200 hover:bg-white/10'
               }`}
             >
-              {date.getDate()}
-              {hasFixtures && (
+              <span>{date.getDate()}</span>
+              {hasPlayed && (
+                <span
+                  className={`absolute bottom-0.5 text-[8px] leading-none ${
+                    selected ? 'text-black/80' : 'text-yellow-400'
+                  }`}
+                  title="Match played on this day"
+                >
+                  •
+                </span>
+              )}
+              {!hasPlayed && hasFixtures && (
                 <span className={`absolute -bottom-0.5 w-1.5 h-1.5 rounded-full ${
                   selected ? 'bg-black/70' : 'bg-yellow-400'
                 }`} />

@@ -62,3 +62,9 @@ body {
   background: linear-gradient(180deg, #eab308, #f97316);
   border-radius: 999px;
 }
+
+/* Betting calendar month/year selects – dark dropdown list to match UI theme */
+.betting-calendar-grid select option {
+  background-color: #0f172a;
+  color: #e2e8f0;
+}
