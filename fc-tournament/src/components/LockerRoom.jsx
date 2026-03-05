@@ -28,6 +28,9 @@ export default function LockerRoom() {
   const videoRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const chunksRef = useRef([]);
+  const countdownTimerRef = useRef(null);
+  const recordingStopTimeoutRef = useRef(null);
+  const streamRef = useRef(null);
 
   const openWithClick = (handler, e) => {
     if (e?.clientX != null && e?.clientY != null) {
@@ -44,6 +47,16 @@ export default function LockerRoom() {
 
   useEffect(() => {
     fetchPlayersAndSyncSeason();
+  }, []);
+
+  // Clean up studio timers and media on unmount (prevents RAM/CPU leak when switching tabs)
+  useEffect(() => {
+    return () => {
+      if (countdownTimerRef.current) clearInterval(countdownTimerRef.current);
+      if (recordingStopTimeoutRef.current) clearTimeout(recordingStopTimeoutRef.current);
+      if (mediaRecorderRef.current?.state === 'recording') mediaRecorderRef.current.stop();
+      streamRef.current?.getTracks().forEach(track => track.stop());
+    };
   }, []);
 
   // --- THE MONTHLY PROGRESSION ENGINE ---
@@ -159,6 +172,7 @@ export default function LockerRoom() {
     setIsStudioOpen(true);
     try {
       const mediaStream = await navigator.mediaDevices.getUserMedia({ video: true });
+      streamRef.current = mediaStream;
       setStream(mediaStream);
       if (videoRef.current) videoRef.current.srcObject = mediaStream;
     } catch (err) {
@@ -168,7 +182,19 @@ export default function LockerRoom() {
   };
 
   const closeStudio = () => {
+    if (countdownTimerRef.current) {
+      clearInterval(countdownTimerRef.current);
+      countdownTimerRef.current = null;
+    }
+    if (recordingStopTimeoutRef.current) {
+      clearTimeout(recordingStopTimeoutRef.current);
+      recordingStopTimeoutRef.current = null;
+    }
+    if (mediaRecorderRef.current?.state === 'recording') {
+      mediaRecorderRef.current.stop();
+    }
     if (stream) stream.getTracks().forEach(track => track.stop());
+    streamRef.current = null;
     setStream(null);
     setIsStudioOpen(false);
     setCountdown(null);
@@ -181,10 +207,14 @@ export default function LockerRoom() {
       count -= 1;
       setCountdown(count);
       if (count === 0) {
-        clearInterval(timer);
+        if (countdownTimerRef.current) {
+          clearInterval(countdownTimerRef.current);
+          countdownTimerRef.current = null;
+        }
         executeCapture();
       }
     }, 1000);
+    countdownTimerRef.current = timer;
   };
 
   const executeCapture = () => {
@@ -202,7 +232,7 @@ export default function LockerRoom() {
       closeStudio();
     };
     mediaRecorder.start();
-    setTimeout(() => mediaRecorder.stop(), 3000);
+    recordingStopTimeoutRef.current = setTimeout(() => mediaRecorder.stop(), 3000);
   };
 
   // --- DATABASE LOGIC ---

@@ -315,6 +315,8 @@ function StarShockwaves() {
 
     function animate() {
       raf = requestAnimationFrame(animate);
+      // Pause heavy work when tab is hidden to save CPU and battery
+      if (typeof document !== 'undefined' && document.hidden) return;
       time += 0.016;
       controls.update();
 

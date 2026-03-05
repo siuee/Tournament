@@ -137,6 +137,19 @@ export default function InsiderInsight() {
     fetchPosts();
   }, []);
 
+  // Clean up recording timer and media recorder on unmount (prevents RAM/CPU leak when switching tabs)
+  useEffect(() => {
+    return () => {
+      if (recordingTimerRef.current) {
+        clearInterval(recordingTimerRef.current);
+        recordingTimerRef.current = null;
+      }
+      if (mediaRecorderRef.current?.state === 'recording') {
+        mediaRecorderRef.current.stop();
+      }
+    };
+  }, []);
+
   // Assign camera stream to video element after it mounts
   useEffect(() => {
     if (useCamera && cameraStream && videoRef.current) {
