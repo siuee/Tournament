@@ -5,7 +5,7 @@ import { collection, getDocs, addDoc, deleteDoc, doc, updateDoc, query, where, o
 import { Plus, Users, User, X, Trash2, Goal, Star, Trophy, Sword, AlertCircle, History, UserPlus, Edit2, Loader2 } from 'lucide-react';
 import { AnimatedDropdown } from './ui/dropdown-01';
 import { motion, AnimatePresence } from 'framer-motion';
-import { toTitleCase, formatTeamDisplay, formatMatchHistoryTeam, formatMatchDateTime, matchTeamToMatch, calculateOvrFromGoalsAssists } from '../lib/utils';
+import { toTitleCase, formatTeamDisplay, formatMatchHistoryTeam, formatMatchDateTime, matchTeamToMatch, getTeamPlayerIds, calculateOvrFromGoalsAssists } from '../lib/utils';
 import { TeamDisplay } from './TeamDisplay';
 import { verifyDeletePassword } from '../lib/security';
 
@@ -95,10 +95,14 @@ export default function MatchDay({ onGoalScored }) {
     const homeS = parseInt(matchData.homeScore) || 0;
     const awayS = parseInt(matchData.awayScore) || 0;
 
+    const homeIds = getTeamPlayerIds(matchData.homeTeam);
+    const awayIds = getTeamPlayerIds(matchData.awayTeam);
     const updatedTeams = activeTournament.teams.map(team => {
       let teamCopy = { ...team };
-      const isHome = team.name === matchData.homeTeam.name;
-      const isAway = team.name === matchData.awayTeam.name;
+      const teamIds = getTeamPlayerIds(team);
+      const teamKey = teamIds.join(',');
+      const isHome = teamKey && homeIds.length && teamKey === homeIds.join(',');
+      const isAway = teamKey && awayIds.length && teamKey === awayIds.join(',');
 
       if (isHome || isAway) {
         const score = isHome ? homeS : awayS;

@@ -52,7 +52,7 @@ export default function Standings() {
             tGoals: 0, tAssists: 0 
         }));
         
-        const matchHistory = mSnap.docs.map(doc => doc.data());
+        const matchHistory = mSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         const leagueGroups = {};
 
         tSnap.docs.forEach(doc => {

@@ -107,6 +107,19 @@ function formatAmericanOdds(odds) {
   return `${odds}`;
 }
 
+// Convert win probability (0–100) to American odds. Favourite gets negative odds (low payout), underdog positive (high payout).
+function probabilityToAmericanOdds(p) {
+  const q = Number(p);
+  if (q >= 100) return -9999;
+  if (q <= 0) return 9999;
+  if (q >= 50) {
+    const odds = -100 * q / (100 - q);
+    return Math.round(odds);
+  }
+  const odds = 100 * (100 - q) / q;
+  return Math.round(odds);
+}
+
 function getPayout(stake, odds) {
   const s = Number(stake) || 0;
   if (!s || !odds) return { win: 0, total: 0 };
@@ -620,9 +633,9 @@ export default function Betting() {
     };
   }, [detailMatch, detailTab]);
 
-  // Load historical matches and compute data-driven win/draw/loss probabilities for Probability tab
+  // Load historical matches and compute win/draw/loss probabilities when a match is selected (for Probability tab and for Bet odds).
   useEffect(() => {
-    if (!detailMatch || detailTab !== 'probability') return;
+    if (!detailMatch) return;
 
     const homeTeam = detailMatch.homeTeamObj;
     const awayTeam = detailMatch.awayTeamObj;
@@ -685,7 +698,7 @@ export default function Betting() {
     return () => {
       cancelled = true;
     };
-  }, [detailMatch, detailTab]);
+  }, [detailMatch]);
 
   return (
     <div className="relative flex flex-col gap-4 w-full pb-28 md:pb-20">
@@ -1153,6 +1166,7 @@ function MatchDetailView({
         {tab === 'bet' && (
           <BetMarketsPanel
             match={match}
+            probState={probState}
             betslip={betslip}
             stake={stake}
             totals={totals}
@@ -1166,9 +1180,19 @@ function MatchDetailView({
   );
 }
 
-function BetMarketsPanel({ match, betslip, stake, totals, onToggleSelection, onStakeChange, onClearAll }) {
+function BetMarketsPanel({ match, probState, betslip, stake, totals, onToggleSelection, onStakeChange, onClearAll }) {
   const home = match.home || 'Home';
   const away = match.away || 'Away';
+
+  const hasProbs = probState && !probState.loading && probState.home != null;
+  const homeOdds = hasProbs ? probabilityToAmericanOdds(probState.home) : -110;
+  const drawOdds = hasProbs ? probabilityToAmericanOdds(probState.draw) : 275;
+  const awayOdds = hasProbs ? probabilityToAmericanOdds(probState.away) : 210;
+  const homeWinShare = hasProbs && (probState.home + probState.away) > 0
+    ? probState.home / (probState.home + probState.away)
+    : 0.5;
+  const drawNoBetHomeOdds = hasProbs ? probabilityToAmericanOdds(homeWinShare * 100) : -190;
+  const drawNoBetAwayOdds = hasProbs ? probabilityToAmericanOdds((1 - homeWinShare) * 100) : 155;
 
   const makeKey = (marketLabel, optionLabel) =>
     `${match.id || match.kickoff}-${marketLabel}-${optionLabel}`;
@@ -1225,16 +1249,16 @@ function BetMarketsPanel({ match, betslip, stake, totals, onToggleSelection, onS
     {
       label: 'Match Winner (3-Way / 1X2)',
       options: [
-        { label: home, odds: -110 },
-        { label: 'Draw', odds: +275 },
-        { label: away, odds: +210 },
+        { label: home, odds: homeOdds },
+        { label: 'Draw', odds: drawOdds },
+        { label: away, odds: awayOdds },
       ],
     },
     {
       label: 'Draw No Bet',
       options: [
-        { label: home, odds: -190 },
-        { label: away, odds: +155 },
+        { label: home, odds: drawNoBetHomeOdds },
+        { label: away, odds: drawNoBetAwayOdds },
       ],
     },
     {
