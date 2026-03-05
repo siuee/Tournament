@@ -120,6 +120,17 @@ function probabilityToAmericanOdds(p) {
   return Math.round(odds);
 }
 
+// Implied probability (0–100) from American odds. Used to hide near-certain options and for dynamic styling.
+function americanOddsToImpliedProb(odds) {
+  const o = Number(odds);
+  if (o >= 0) return (100 / (o + 100)) * 100;
+  return (Math.abs(o) / (Math.abs(o) + 100)) * 100;
+}
+
+// Don't show options that are almost certain (≥ this %) or almost impossible (≤ this %) — keep odds dynamic and bettable.
+const BETTABLE_PROB_MIN = 6;
+const BETTABLE_PROB_MAX = 94;
+
 function getPayout(stake, odds) {
   const s = Number(stake) || 0;
   if (!s || !odds) return { win: 0, total: 0 };
@@ -177,6 +188,210 @@ function computePoissonProbabilities(homeStats, awayStats) {
   const draw = Math.round(pDraw * scale);
   const away = 100 - home - draw;
   return { home, draw, away };
+}
+
+// Total goals Over/Under: use past match data. If they consistently go over X.5, P(Over) is high → lower payout (negative odds).
+// If they rarely go over, P(Over) is low → higher payout (positive odds). Fallback to Poisson when no/small history.
+const TOTAL_LINES = ['1.5', '2.5', '3.5', '4.5', '5.5', '6.5'];
+function computeTotalsProbsFromHistory(all, homeTeam, awayTeam, homeStats, awayStats) {
+  const defaultLambda = 1.2;
+  const homeAvgFor = homeStats.games > 0 ? homeStats.goalsFor / homeStats.games : defaultLambda;
+  const homeAvgAgainst = homeStats.games > 0 ? homeStats.goalsAgainst / homeStats.games : defaultLambda;
+  const awayAvgFor = awayStats.games > 0 ? awayStats.goalsFor / awayStats.games : defaultLambda;
+  const awayAvgAgainst = awayStats.games > 0 ? awayStats.goalsAgainst / awayStats.games : defaultLambda;
+  const lambdaHome = (homeAvgFor + awayAvgAgainst) / 2;
+  const lambdaAway = (awayAvgFor + homeAvgAgainst) / 2;
+  const lambdaTotal = lambdaHome + lambdaAway;
+
+  const poissonPOver = (line) => {
+    const k = Math.floor(Number(line));
+    let pUnder = 0;
+    for (let i = 0; i <= k; i++) pUnder += poissonPmf(i, lambdaTotal);
+    return 1 - pUnder;
+  };
+
+  const homeMatches = all.filter(m =>
+    matchTeamToMatch(homeTeam, m, 'home') || matchTeamToMatch(homeTeam, m, 'away')
+  );
+  const awayMatches = all.filter(m =>
+    matchTeamToMatch(awayTeam, m, 'home') || matchTeamToMatch(awayTeam, m, 'away')
+  );
+  const allTotals = [
+    ...homeMatches.map(m => (Number(m.homeScore) || 0) + (Number(m.awayScore) || 0)),
+    ...awayMatches.map(m => (Number(m.homeScore) || 0) + (Number(m.awayScore) || 0)),
+  ];
+  const n = allTotals.length;
+  const minMatchesForHistory = 3;
+
+  const result = {};
+  for (const line of TOTAL_LINES) {
+    const threshold = Number(line);
+    if (n >= minMatchesForHistory) {
+      const overCount = allTotals.filter(t => t > threshold).length;
+      result[line] = overCount / n;
+    } else {
+      result[line] = poissonPOver(line);
+    }
+  }
+  return result;
+}
+
+// Per-team goal totals: from past matches, P(team scores Over X.5). If team almost always scores 3+, Over 2.5 is very likely → low odds.
+const TEAM_TOTAL_LINES = ['0.5', '1.5', '2.5', '3.5'];
+function computeTeamTotalsProbsFromHistory(all, team, teamStats) {
+  const defaultLambda = 1.2;
+  const lambda = teamStats.games > 0 ? teamStats.goalsFor / teamStats.games : defaultLambda;
+  const teamMatches = all.filter(m =>
+    matchTeamToMatch(team, m, 'home') || matchTeamToMatch(team, m, 'away')
+  );
+  const goalsPerGame = teamMatches.map((m) => {
+    const isHome = matchTeamToMatch(team, m, 'home');
+    return isHome ? (Number(m.homeScore) || 0) : (Number(m.awayScore) || 0);
+  });
+  const n = goalsPerGame.length;
+  const minMatchesForHistory = 3;
+  const result = {};
+  for (const line of TEAM_TOTAL_LINES) {
+    const threshold = Number(line);
+    if (n >= minMatchesForHistory) {
+      const overCount = goalsPerGame.filter((g) => g > threshold).length;
+      result[line] = Math.max(0.01, Math.min(0.99, overCount / n));
+    } else {
+      let pUnder = 0;
+      for (let i = 0; i <= Math.floor(threshold); i++) pUnder += poissonPmf(i, lambda);
+      result[line] = Math.max(0.01, Math.min(0.99, 1 - pUnder));
+    }
+  }
+  return result;
+}
+
+// Clean sheet probabilities from past data: P(team concedes 0) using all historical matches plus Poisson fallback.
+function computeCleanSheetProbsFromHistory(all, homeTeam, awayTeam, homeStats, awayStats) {
+  const defaultLambda = 1.2;
+
+  const homeAvgAgainst = homeStats.games > 0 ? homeStats.goalsAgainst / homeStats.games : defaultLambda;
+  const awayAvgAgainst = awayStats.games > 0 ? awayStats.goalsAgainst / awayStats.games : defaultLambda;
+  const awayAvgFor = awayStats.games > 0 ? awayStats.goalsFor / awayStats.games : defaultLambda;
+  const homeAvgFor = homeStats.games > 0 ? homeStats.goalsFor / homeStats.games : defaultLambda;
+
+  const homeMatches = all.filter(m =>
+    matchTeamToMatch(homeTeam, m, 'home') || matchTeamToMatch(homeTeam, m, 'away')
+  );
+  const awayMatches = all.filter(m =>
+    matchTeamToMatch(awayTeam, m, 'home') || matchTeamToMatch(awayTeam, m, 'away')
+  );
+
+  let homeCsCount = 0;
+  homeMatches.forEach((m) => {
+    const isHome = matchTeamToMatch(homeTeam, m, 'home');
+    const conceded = isHome ? (Number(m.awayScore) || 0) : (Number(m.homeScore) || 0);
+    if (conceded === 0) homeCsCount += 1;
+  });
+  let awayCsCount = 0;
+  awayMatches.forEach((m) => {
+    const isHome = matchTeamToMatch(awayTeam, m, 'home');
+    const conceded = isHome ? (Number(m.awayScore) || 0) : (Number(m.homeScore) || 0);
+    if (conceded === 0) awayCsCount += 1;
+  });
+
+  const nHome = homeMatches.length;
+  const nAway = awayMatches.length;
+  const minMatches = 3;
+
+  // Poisson model for opponent goals vs this defence.
+  const lambdaHomeConceded = (homeAvgAgainst + awayAvgFor) / 2;
+  const lambdaAwayConceded = (awayAvgAgainst + homeAvgFor) / 2;
+  const pHomePoisson = poissonPmf(0, lambdaHomeConceded);
+  const pAwayPoisson = poissonPmf(0, lambdaAwayConceded);
+
+  const pHomeHist = nHome > 0 ? homeCsCount / nHome : null;
+  const pAwayHist = nAway > 0 ? awayCsCount / nAway : null;
+
+  const blend = (hist, poisson, n) => {
+    if (hist == null || n < minMatches) return poisson;
+    const wHist = 0.7;
+    const wPois = 0.3;
+    return wHist * hist + wPois * poisson;
+  };
+
+  const pHome = Math.max(0.01, Math.min(0.99, blend(pHomeHist, pHomePoisson, nHome)));
+  const pAway = Math.max(0.01, Math.min(0.99, blend(pAwayHist, pAwayPoisson, nAway)));
+
+  return { home: pHome, away: pAway };
+}
+
+// Half-time odds from past team/player goals. DB has no half-time data → assume goals split 50/50 per half.
+// High total goals in past (e.g. 10) → likely ~5 per half → Over 1.5 in each half very likely → lower odds.
+// Low total (e.g. 2) → ~1 per half → Over 2.5 in a half unlikely → higher odds.
+const HALF_LINES = ['0.5', '1.5', '2.5'];
+function computeHalfTimeProbsFromHistory(all, homeTeam, awayTeam, homeStats, awayStats) {
+  const defaultLambda = 1.2;
+  const homeAvgFor = homeStats.games > 0 ? homeStats.goalsFor / homeStats.games : defaultLambda;
+  const homeAvgAgainst = homeStats.games > 0 ? homeStats.goalsAgainst / homeStats.games : defaultLambda;
+  const awayAvgFor = awayStats.games > 0 ? awayStats.goalsFor / awayStats.games : defaultLambda;
+  const awayAvgAgainst = awayStats.games > 0 ? awayStats.goalsAgainst / awayStats.games : defaultLambda;
+  const lambdaHome = (homeAvgFor + awayAvgAgainst) / 2;
+  const lambdaAway = (awayAvgFor + homeAvgAgainst) / 2;
+  const lambdaTotal = lambdaHome + lambdaAway;
+  const lambdaFirstHalf = lambdaTotal / 2;
+  const lambdaHome1st = lambdaHome / 2;
+  const lambdaAway1st = lambdaAway / 2;
+
+  const homeMatches = all.filter(m =>
+    matchTeamToMatch(homeTeam, m, 'home') || matchTeamToMatch(homeTeam, m, 'away')
+  );
+  const awayMatches = all.filter(m =>
+    matchTeamToMatch(awayTeam, m, 'home') || matchTeamToMatch(awayTeam, m, 'away')
+  );
+  const allTotals = [
+    ...homeMatches.map(m => (Number(m.homeScore) || 0) + (Number(m.awayScore) || 0)),
+    ...awayMatches.map(m => (Number(m.homeScore) || 0) + (Number(m.awayScore) || 0)),
+  ];
+  const n = allTotals.length;
+  const minMatchesForHistory = 3;
+
+  const halfPOver = (line) => {
+    const threshold = Number(line);
+    if (n >= minMatchesForHistory) {
+      const fullMatchThreshold = 2 * threshold;
+      const overCount = allTotals.filter(t => t > fullMatchThreshold).length;
+      return overCount / n;
+    }
+    const k = Math.floor(threshold);
+    let pUnder = 0;
+    for (let i = 0; i <= k; i++) pUnder += poissonPmf(i, lambdaFirstHalf);
+    return 1 - pUnder;
+  };
+
+  const firstHalf = {};
+  const secondHalf = {};
+  for (const line of HALF_LINES) {
+    const p = Math.max(0.01, Math.min(0.99, halfPOver(line)));
+    firstHalf[line] = p;
+    secondHalf[line] = p;
+  }
+
+  let home1st = 0, draw1st = 0, away1st = 0;
+  const maxGoals = 8;
+  for (let i = 0; i <= maxGoals; i++) {
+    const ph = poissonPmf(i, lambdaHome1st);
+    for (let j = 0; j <= maxGoals; j++) {
+      const pa = poissonPmf(j, lambdaAway1st);
+      const p = ph * pa;
+      if (i > j) home1st += p;
+      else if (i === j) draw1st += p;
+      else away1st += p;
+    }
+  }
+  const total1st = home1st + draw1st + away1st;
+  const scale = total1st > 0 ? 100 / total1st : 1 / 3;
+  const result = {
+    home: Math.round(home1st * scale),
+    draw: Math.round(draw1st * scale),
+    away: 100 - Math.round(home1st * scale) - Math.round(draw1st * scale),
+  };
+
+  return { firstHalf, secondHalf, result };
 }
 
 // Build per-player career stats (goals, assists, games) from all matches.
@@ -266,6 +481,77 @@ function computePlayerStrengthProbabilities(homeTeam, awayTeam, playerStatsMap) 
   const draw = Math.round(drawP * scale);
   const away = 100 - home - draw;
   return { home, draw, away };
+}
+
+// Per-player scoring props: use ALL past match stats to predict likelihood to score first.
+// Dynamic model: goals, assists, games (from every past match) → scoring propensity → P(score first).
+// Higher predicted probability → lower payout. Lower probability → higher payout.
+// Returns { firstToScore: [ { playerId, name, prob } ], lastToScore: same, noGoalsProb }.
+const PLAYER_SCORING_OVERROUND = 1.0476; // -105 style: combined implied prob ~104.76%.
+// Scoring propensity from full career stats (all past matches). Uses goals, rate (goals/game), and assists.
+function firstScorerPropensity(stats, games) {
+  if (!stats) return 0.5;
+  const goals = Math.max(0, Number(stats.goals) || 0);
+  const assists = Math.max(0, Number(stats.assists) || 0);
+  const g = games > 0 ? games : 1;
+  const goalsPerGame = goals / g;
+  const volume = Math.pow(goals + 1, 1.25);
+  const rate = Math.pow(goalsPerGame + 0.12, 1.1);
+  const involvement = 1 + 0.4 * Math.log1p(assists);
+  return volume * rate * involvement;
+}
+
+function computePlayerScoringProbs(homeTeam, awayTeam, playerStatsMap, homeStats, awayStats) {
+  const homePlayers = homeTeam?.playerData || [];
+  const awayPlayers = awayTeam?.playerData || [];
+  const list = [];
+  const add = (p) => {
+    if (!p?.id) return;
+    const s = playerStatsMap.get(p.id);
+    const games = Math.max(0, Number(s?.games) || 0);
+    const goals = Math.max(0, Number(s?.goals) || 0);
+    const assists = Math.max(0, Number(s?.assists) || 0);
+    const name = (p.realName || p.name || p.displayName || p.gamertag || 'Player').trim().split(/\s+/)[0] || 'Player';
+    const propensity = firstScorerPropensity(s, games);
+    list.push({ playerId: p.id, name, goals, assists, games, propensity });
+  };
+  homePlayers.forEach(add);
+  awayPlayers.forEach(add);
+  if (list.length === 0) return null;
+
+  const defaultLambda = 1.2;
+  const homeAvgFor = homeStats?.games > 0 ? homeStats.goalsFor / homeStats.games : defaultLambda;
+  const homeAvgAgainst = homeStats?.games > 0 ? homeStats.goalsAgainst / homeStats.games : defaultLambda;
+  const awayAvgFor = awayStats?.games > 0 ? awayStats.goalsFor / awayStats.games : defaultLambda;
+  const awayAvgAgainst = awayStats?.games > 0 ? awayStats.goalsAgainst / awayStats.games : defaultLambda;
+  const lambdaHome = (homeAvgFor + awayAvgAgainst) / 2;
+  const lambdaAway = (awayAvgFor + homeAvgAgainst) / 2;
+  const lambdaTotal = lambdaHome + lambdaAway;
+  const pNoGoals = poissonPmf(0, lambdaTotal);
+  const pAtLeastOneGoal = 1 - pNoGoals;
+
+  const sumProp = list.reduce((a, x) => a + x.propensity, 0) || 1;
+  let firstToScore = list.map(({ playerId, name, propensity }) => ({
+    playerId,
+    name,
+    prob: pAtLeastOneGoal * (propensity / sumProp),
+  }));
+  firstToScore = [...firstToScore].sort((a, b) => b.prob - a.prob);
+  const noGoalsProb = pNoGoals;
+
+  return {
+    firstToScore,
+    lastToScore: firstToScore.map((x) => ({ ...x })),
+    noGoalsProb,
+  };
+}
+
+// Apply book margin so combined implied probability is ~104.76% (-105 style). Returns American odds per option.
+function playerScoringProbsToOddsWithVig(optionProbs) {
+  const total = optionProbs.reduce((a, p) => a + p, 0);
+  if (total <= 0) return optionProbs.map(() => 100);
+  const vigged = optionProbs.map((p) => (p / total) * PLAYER_SCORING_OVERROUND);
+  return vigged.map((implied) => probabilityToAmericanOdds(Math.max(1, Math.min(99, implied * 100))));
 }
 
 // Blend two probability objects (a and b) by weight w: w*a + (1-w)*b, then normalize to 100.
@@ -398,6 +684,11 @@ export default function Betting() {
   const [h2hState, setH2hState] = useState({ loading: false, error: null, summary: null, matches: [] });
   const [formState, setFormState] = useState({ loading: false, homeForm: null, awayForm: null });
   const [probState, setProbState] = useState({ loading: false, home: null, draw: null, away: null });
+  const [totalsProbsState, setTotalsProbsState] = useState({ loading: false, lines: null });
+  const [halfTimeProbsState, setHalfTimeProbsState] = useState({ loading: false, data: null });
+  const [playerScoringProbsState, setPlayerScoringProbsState] = useState(null);
+  const [teamTotalsProbsState, setTeamTotalsProbsState] = useState({ home: null, away: null });
+  const [cleanSheetProbsState, setCleanSheetProbsState] = useState({ home: null, away: null });
 
   useEffect(() => {
     let mounted = true;
@@ -641,6 +932,11 @@ export default function Betting() {
     const awayTeam = detailMatch.awayTeamObj;
     if (!homeTeam || !awayTeam) {
       setProbState({ loading: false, home: null, draw: null, away: null });
+      setTotalsProbsState({ loading: false, lines: null });
+      setHalfTimeProbsState({ loading: false, data: null });
+      setPlayerScoringProbsState(null);
+      setTeamTotalsProbsState({ home: null, away: null });
+      setCleanSheetProbsState({ home: null, away: null });
       return;
     }
 
@@ -648,6 +944,11 @@ export default function Betting() {
 
     (async () => {
       setProbState({ loading: true, home: null, draw: null, away: null });
+        setTotalsProbsState({ loading: true, lines: null });
+        setHalfTimeProbsState({ loading: true, data: null });
+        setPlayerScoringProbsState(null);
+        setTeamTotalsProbsState({ home: null, away: null });
+        setCleanSheetProbsState({ home: null, away: null });
       try {
         const snap = await getDocs(collection(db, 'matches'));
         const all = snap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -685,13 +986,30 @@ export default function Betting() {
           probs = poissonProbs;
         }
 
+        const totalsLines = computeTotalsProbsFromHistory(all, homeTeam, awayTeam, homeStats, awayStats);
+        const halfTimeProbs = computeHalfTimeProbsFromHistory(all, homeTeam, awayTeam, homeStats, awayStats);
+        const playerScoringProbs = computePlayerScoringProbs(homeTeam, awayTeam, playerStatsMap, homeStats, awayStats);
+        const homeTeamTotalsProbs = computeTeamTotalsProbsFromHistory(all, homeTeam, homeStats);
+        const awayTeamTotalsProbs = computeTeamTotalsProbsFromHistory(all, awayTeam, awayStats);
+        const cleanSheetProbs = computeCleanSheetProbsFromHistory(all, homeTeam, awayTeam, homeStats, awayStats);
+
         if (!cancelled) {
           setProbState({ loading: false, home: probs.home, draw: probs.draw, away: probs.away });
+          setTotalsProbsState({ loading: false, lines: totalsLines });
+          setHalfTimeProbsState({ loading: false, data: halfTimeProbs });
+          setPlayerScoringProbsState(playerScoringProbs);
+          setTeamTotalsProbsState({ home: homeTeamTotalsProbs, away: awayTeamTotalsProbs });
+          setCleanSheetProbsState(cleanSheetProbs);
         }
       } catch (e) {
         console.error('Failed to load probability data', e);
         if (!cancelled) {
           setProbState({ loading: false, home: null, draw: null, away: null });
+          setTotalsProbsState({ loading: false, lines: null });
+          setHalfTimeProbsState({ loading: false, data: null });
+          setPlayerScoringProbsState(null);
+          setTeamTotalsProbsState({ home: null, away: null });
+          setCleanSheetProbsState({ home: null, away: null });
         }
       }
     })();
@@ -733,6 +1051,11 @@ export default function Betting() {
             setTab={setDetailTab}
             formState={formState}
             probState={probState}
+            totalsProbs={totalsProbsState?.lines}
+            halfTimeProbs={halfTimeProbsState?.data}
+            teamTotalsProbs={teamTotalsProbsState}
+            cleanSheetProbs={cleanSheetProbsState}
+            playerScoringProbs={playerScoringProbsState}
             betslip={betslip}
             stake={stake}
             totals={totals}
@@ -995,6 +1318,11 @@ function MatchDetailView({
   h2hState,
   formState,
   probState,
+  totalsProbs,
+  halfTimeProbs,
+  teamTotalsProbs,
+  cleanSheetProbs,
+  playerScoringProbs,
   betslip,
   stake,
   totals,
@@ -1167,6 +1495,11 @@ function MatchDetailView({
           <BetMarketsPanel
             match={match}
             probState={probState}
+            totalsProbs={totalsProbs}
+            halfTimeProbs={halfTimeProbs}
+            cleanSheetProbs={cleanSheetProbs}
+            teamTotalsProbs={teamTotalsProbs}
+            playerScoringProbs={playerScoringProbs}
             betslip={betslip}
             stake={stake}
             totals={totals}
@@ -1180,11 +1513,19 @@ function MatchDetailView({
   );
 }
 
-function BetMarketsPanel({ match, probState, betslip, stake, totals, onToggleSelection, onStakeChange, onClearAll }) {
+function BetMarketsPanel({ match, probState, totalsProbs, halfTimeProbs, cleanSheetProbs, teamTotalsProbs, playerScoringProbs, betslip, stake, totals, onToggleSelection, onStakeChange, onClearAll }) {
   const home = match.home || 'Home';
   const away = match.away || 'Away';
+  const homePlayers = match.homeTeamObj?.playerData || [];
+  const awayPlayers = match.awayTeamObj?.playerData || [];
+  const is2v2 = homePlayers.length === 2 && awayPlayers.length === 2;
 
   const hasProbs = probState && !probState.loading && probState.home != null;
+  const hasTotalsProbs = totalsProbs && typeof totalsProbs['1.5'] === 'number';
+  const hasHalfTimeProbs = halfTimeProbs && halfTimeProbs.firstHalf && halfTimeProbs.result;
+  const hasCleanSheetProbs = cleanSheetProbs && typeof cleanSheetProbs.home === 'number' && typeof cleanSheetProbs.away === 'number';
+  const hasTeamTotalsProbs = teamTotalsProbs && teamTotalsProbs.home && teamTotalsProbs.away;
+  const hasPlayerScoringProbs = playerScoringProbs && playerScoringProbs.firstToScore?.length > 0;
   const homeOdds = hasProbs ? probabilityToAmericanOdds(probState.home) : -110;
   const drawOdds = hasProbs ? probabilityToAmericanOdds(probState.draw) : 275;
   const awayOdds = hasProbs ? probabilityToAmericanOdds(probState.away) : 210;
@@ -1303,6 +1644,7 @@ function BetMarketsPanel({ match, probState, betslip, stake, totals, onToggleSel
     },
   ];
 
+  // Goal totals: odds from past data. High probability of Over → lower payout (negative odds); low probability → higher payout.
   const totalsMarkets = [
     '1.5',
     '2.5',
@@ -1310,13 +1652,24 @@ function BetMarketsPanel({ match, probState, betslip, stake, totals, onToggleSel
     '4.5',
     '5.5',
     '6.5',
-  ].map((line, idx) => ({
-    label: `Total Goals - Over/Under ${line}`,
-    options: [
-      { label: `Over ${line}`, odds: idx < 2 ? -135 : +120 + idx * 10 },
-      { label: `Under ${line}`, odds: +115 + idx * 10 },
-    ],
-  }));
+  ].map((line, idx) => {
+    let overOdds, underOdds;
+    if (hasTotalsProbs && totalsProbs[line] != null) {
+      const pOver = Math.max(0.01, Math.min(0.99, totalsProbs[line]));
+      overOdds = probabilityToAmericanOdds(pOver * 100);
+      underOdds = probabilityToAmericanOdds((1 - pOver) * 100);
+    } else {
+      overOdds = idx < 2 ? -135 : +120 + idx * 10;
+      underOdds = +115 + idx * 10;
+    }
+    return {
+      label: `Total Goals - Over/Under ${line}`,
+      options: [
+        { label: `Over ${line}`, odds: overOdds },
+        { label: `Under ${line}`, odds: underOdds },
+      ],
+    };
+  });
 
   const totalsExtras = [
     {
@@ -1374,13 +1727,38 @@ function BetMarketsPanel({ match, probState, betslip, stake, totals, onToggleSel
     },
   ];
 
+  // Half-time odds from DB: team/player goal history → assume 50/50 split per half. High total → high chance >1.5 per half → lower odds.
+  const htResult = hasHalfTimeProbs ? halfTimeProbs.result : { home: 34, draw: 33, away: 33 };
+  const htHomeOdds = hasHalfTimeProbs ? probabilityToAmericanOdds(htResult.home) : +120;
+  const htDrawOdds = hasHalfTimeProbs ? probabilityToAmericanOdds(htResult.draw) : +115;
+  const htAwayOdds = hasHalfTimeProbs ? probabilityToAmericanOdds(htResult.away) : +260;
+
+  const firstHalfLineOdds = (line) => {
+    if (hasHalfTimeProbs && halfTimeProbs.firstHalf[line] != null) {
+      const pOver = Math.max(0.01, Math.min(0.99, halfTimeProbs.firstHalf[line]));
+      return { over: probabilityToAmericanOdds(pOver * 100), under: probabilityToAmericanOdds((1 - pOver) * 100) };
+    }
+    if (line === '0.5') return { over: -220, under: +185 };
+    if (line === '1.5') return { over: +115, under: -135 };
+    return { over: +360, under: -475 };
+  };
+  const secondHalfLineOdds = (line) => {
+    if (hasHalfTimeProbs && halfTimeProbs.secondHalf[line] != null) {
+      const pOver = Math.max(0.01, Math.min(0.99, halfTimeProbs.secondHalf[line]));
+      return { over: probabilityToAmericanOdds(pOver * 100), under: probabilityToAmericanOdds((1 - pOver) * 100) };
+    }
+    if (line === '0.5') return { over: -260, under: +210 };
+    if (line === '1.5') return { over: +110, under: -130 };
+    return { over: +140, under: -165 };
+  };
+
   const halfTimeMarkets = [
     {
       label: 'Half Time Result (1X2)',
       options: [
-        { label: home, odds: +120 },
-        { label: 'Draw', odds: +115 },
-        { label: away, odds: +260 },
+        { label: home, odds: htHomeOdds },
+        { label: 'Draw', odds: htDrawOdds },
+        { label: away, odds: htAwayOdds },
       ],
     },
     {
@@ -1406,22 +1784,22 @@ function BetMarketsPanel({ match, probState, betslip, stake, totals, onToggleSel
     {
       label: 'First Half - Total Goals Over/Under 0.5',
       options: [
-        { label: 'Over 0.5', odds: -220 },
-        { label: 'Under 0.5', odds: +185 },
+        { label: 'Over 0.5', odds: firstHalfLineOdds('0.5').over },
+        { label: 'Under 0.5', odds: firstHalfLineOdds('0.5').under },
       ],
     },
     {
       label: 'First Half - Total Goals Over/Under 1.5',
       options: [
-        { label: 'Over 1.5', odds: +115 },
-        { label: 'Under 1.5', odds: -135 },
+        { label: 'Over 1.5', odds: firstHalfLineOdds('1.5').over },
+        { label: 'Under 1.5', odds: firstHalfLineOdds('1.5').under },
       ],
     },
     {
       label: 'First Half - Total Goals Over/Under 2.5',
       options: [
-        { label: 'Over 2.5', odds: +360 },
-        { label: 'Under 2.5', odds: -475 },
+        { label: 'Over 2.5', odds: firstHalfLineOdds('2.5').over },
+        { label: 'Under 2.5', odds: firstHalfLineOdds('2.5').under },
       ],
     },
     {
@@ -1459,23 +1837,30 @@ function BetMarketsPanel({ match, probState, betslip, stake, totals, onToggleSel
     {
       label: 'Second Half Result (1X2)',
       options: [
-        { label: home, odds: +130 },
-        { label: 'Draw', odds: +200 },
-        { label: away, odds: +260 },
+        { label: home, odds: htHomeOdds },
+        { label: 'Draw', odds: htDrawOdds },
+        { label: away, odds: htAwayOdds },
       ],
     },
     {
       label: 'Second Half - Total Goals Over/Under 0.5',
       options: [
-        { label: 'Over 0.5', odds: -260 },
-        { label: 'Under 0.5', odds: +210 },
+        { label: 'Over 0.5', odds: secondHalfLineOdds('0.5').over },
+        { label: 'Under 0.5', odds: secondHalfLineOdds('0.5').under },
       ],
     },
     {
       label: 'Second Half - Total Goals Over/Under 1.5',
       options: [
-        { label: 'Over 1.5', odds: +110 },
-        { label: 'Under 1.5', odds: -130 },
+        { label: 'Over 1.5', odds: secondHalfLineOdds('1.5').over },
+        { label: 'Under 1.5', odds: secondHalfLineOdds('1.5').under },
+      ],
+    },
+    {
+      label: 'Second Half - Total Goals Over/Under 2.5',
+      options: [
+        { label: 'Over 2.5', odds: secondHalfLineOdds('2.5').over },
+        { label: 'Under 2.5', odds: secondHalfLineOdds('2.5').under },
       ],
     },
     {
@@ -1517,22 +1902,78 @@ function BetMarketsPanel({ match, probState, betslip, stake, totals, onToggleSel
     },
   ];
 
+  // First/Last to Score: odds from past goals; top scorer gets LOWEST odds (favourite). Combined vig ~-105.
+  const firstToScoreOptions = (() => {
+    if (is2v2 && hasPlayerScoringProbs) {
+      const probs = [
+        ...playerScoringProbs.firstToScore.map((x) => x.prob),
+        playerScoringProbs.noGoalsProb ?? 0,
+      ];
+      const oddsArr = playerScoringProbsToOddsWithVig(probs);
+      const labels = [...playerScoringProbs.firstToScore.map((x) => x.name), 'No Goals'];
+      return labels.map((label, i) => ({ label, odds: oddsArr[i] }));
+    }
+    if (hasPlayerScoringProbs && playerScoringProbs.firstToScore.length >= 1) {
+      const probs = [
+        playerScoringProbs.firstToScore[0]?.prob ?? 0.4,
+        playerScoringProbs.firstToScore[1]?.prob ?? 0.35,
+        playerScoringProbs.noGoalsProb ?? 0.25,
+      ];
+      const oddsArr = playerScoringProbsToOddsWithVig(probs);
+      return [
+        { label: home, odds: oddsArr[0] },
+        { label: away, odds: oddsArr[1] },
+        { label: 'No Goals', odds: oddsArr[2] },
+      ];
+    }
+    const fallbackProbs = [0.4, 0.35, 0.25];
+    const oddsArr = playerScoringProbsToOddsWithVig(fallbackProbs);
+    return [
+      { label: home, odds: oddsArr[0] },
+      { label: away, odds: oddsArr[1] },
+      { label: 'No Goals', odds: oddsArr[2] },
+    ];
+  })();
+  const lastToScoreOptions = (() => {
+    if (is2v2 && hasPlayerScoringProbs) {
+      const probs = [
+        ...playerScoringProbs.lastToScore.map((x) => x.prob),
+        playerScoringProbs.noGoalsProb ?? 0,
+      ];
+      const oddsArr = playerScoringProbsToOddsWithVig(probs);
+      const labels = [...playerScoringProbs.lastToScore.map((x) => x.name), 'No Goals'];
+      return labels.map((label, i) => ({ label, odds: oddsArr[i] }));
+    }
+    if (hasPlayerScoringProbs && playerScoringProbs.lastToScore.length >= 1) {
+      const probs = [
+        playerScoringProbs.lastToScore[0]?.prob ?? 0.4,
+        playerScoringProbs.lastToScore[1]?.prob ?? 0.35,
+        playerScoringProbs.noGoalsProb ?? 0.25,
+      ];
+      const oddsArr = playerScoringProbsToOddsWithVig(probs);
+      return [
+        { label: home, odds: oddsArr[0] },
+        { label: away, odds: oddsArr[1] },
+        { label: 'No Goals', odds: oddsArr[2] },
+      ];
+    }
+    const fallbackProbs = [0.4, 0.35, 0.25];
+    const oddsArr = playerScoringProbsToOddsWithVig(fallbackProbs);
+    return [
+      { label: home, odds: oddsArr[0] },
+      { label: away, odds: oddsArr[1] },
+      { label: 'No Goals', odds: oddsArr[2] },
+    ];
+  })();
+
   const playerProps = [
     {
       label: 'First Player to Score',
-      options: [
-        { label: home, odds: +115 },
-        { label: away, odds: +160 },
-        { label: 'No Goals', odds: +900 },
-      ],
+      options: firstToScoreOptions,
     },
     {
       label: 'Last Player to Score',
-      options: [
-        { label: home, odds: +120 },
-        { label: away, odds: +170 },
-        { label: 'No Goals', odds: +900 },
-      ],
+      options: lastToScoreOptions,
     },
     {
       label: 'Team to Score in Both Halves',
@@ -1559,15 +2000,37 @@ function BetMarketsPanel({ match, probState, betslip, stake, totals, onToggleSel
     },
     {
       label: 'Clean Sheet',
-      options: [
-        { label: `${home} – Yes`, odds: +260 },
-        { label: `${home} – No`, odds: -360 },
-        { label: `${away} – Yes`, odds: +400 },
-        { label: `${away} – No`, odds: -600 },
-      ],
+      options: (() => {
+        if (hasCleanSheetProbs) {
+          const clampP = (p) => Math.max(0.01, Math.min(0.99, p ?? 0));
+          const pHomeCs = clampP(cleanSheetProbs.home);
+          const pAwayCs = clampP(cleanSheetProbs.away);
+          return [
+            { label: `${home} – Yes`, odds: probabilityToAmericanOdds(pHomeCs * 100) },
+            { label: `${home} – No`, odds: probabilityToAmericanOdds((1 - pHomeCs) * 100) },
+            { label: `${away} – Yes`, odds: probabilityToAmericanOdds(pAwayCs * 100) },
+            { label: `${away} – No`, odds: probabilityToAmericanOdds((1 - pAwayCs) * 100) },
+          ];
+        }
+        return [
+          { label: `${home} – Yes`, odds: +260 },
+          { label: `${home} – No`, odds: -360 },
+          { label: `${away} – Yes`, odds: +400 },
+          { label: `${away} – No`, odds: -600 },
+        ];
+      })(),
     },
   ];
 
+  // Combo odds from past data: P(winner) × P(total) so likely combos (e.g. strong team + high total) get low odds.
+  const pHome = hasProbs ? probState.home / 100 : 0.4;
+  const pAway = hasProbs ? probState.away / 100 : 0.35;
+  const pDraw = hasProbs ? probState.draw / 100 : 0.25;
+  const pOver = (line) => (hasTotalsProbs && totalsProbs[line] != null ? Math.max(0.01, Math.min(0.99, totalsProbs[line])) : 0.5);
+  const pBttsYes = hasTeamTotalsProbs
+    ? Math.max(0.05, Math.min(0.95, (teamTotalsProbs.home['0.5'] || 0.7) * (teamTotalsProbs.away['0.5'] || 0.65)))
+    : 0.55;
+  const comboLineToKey = (s) => s.replace('Over ', '').replace('Under ', '');
   const comboMarkets = [
     'Over 1.5',
     'Over 2.5',
@@ -1575,102 +2038,114 @@ function BetMarketsPanel({ match, probState, betslip, stake, totals, onToggleSel
     'Under 1.5',
     'Under 2.5',
     'Under 3.5',
-  ].map((totalStr, idx) => ({
-    label: `Match Winner + ${totalStr}`,
-    options: [
-      { label: `${home} & ${totalStr}`, odds: +150 + idx * 15 },
-      { label: `${away} & ${totalStr}`, odds: +220 + idx * 15 },
-    ],
-  })).concat([
+  ].map((totalStr) => {
+    const isOver = totalStr.startsWith('Over');
+    const line = comboLineToKey(totalStr);
+    const pTotal = isOver ? pOver(line) : 1 - pOver(line);
+    const pHomeCombo = pHome * pTotal;
+    const pAwayCombo = pAway * pTotal;
+    return {
+      label: `Match Winner + ${totalStr}`,
+      options: [
+        { label: `${home} & ${totalStr}`, odds: probabilityToAmericanOdds(Math.max(6, Math.min(94, pHomeCombo * 100))) },
+        { label: `${away} & ${totalStr}`, odds: probabilityToAmericanOdds(Math.max(6, Math.min(94, pAwayCombo * 100))) },
+      ],
+    };
+  }).concat([
     {
       label: 'Match Winner + BTTS (Yes)',
       options: [
-        { label: `${home} & BTTS Yes`, odds: +240 },
-        { label: `${away} & BTTS Yes`, odds: +300 },
+        { label: `${home} & BTTS Yes`, odds: probabilityToAmericanOdds(Math.max(6, Math.min(94, pHome * pBttsYes * 100))) },
+        { label: `${away} & BTTS Yes`, odds: probabilityToAmericanOdds(Math.max(6, Math.min(94, pAway * pBttsYes * 100))) },
       ],
     },
     {
       label: 'Match Winner + BTTS (No)',
       options: [
-        { label: `${home} & BTTS No`, odds: +260 },
-        { label: `${away} & BTTS No`, odds: +340 },
+        { label: `${home} & BTTS No`, odds: probabilityToAmericanOdds(Math.max(6, Math.min(94, pHome * (1 - pBttsYes) * 100))) },
+        { label: `${away} & BTTS No`, odds: probabilityToAmericanOdds(Math.max(6, Math.min(94, pAway * (1 - pBttsYes) * 100))) },
       ],
     },
     {
       label: 'Draw + BTTS',
       options: [
-        { label: 'Draw & BTTS Yes', odds: +350 },
-        { label: 'Draw & BTTS No', odds: +475 },
+        { label: 'Draw & BTTS Yes', odds: probabilityToAmericanOdds(Math.max(6, Math.min(94, pDraw * pBttsYes * 100))) },
+        { label: 'Draw & BTTS No', odds: probabilityToAmericanOdds(Math.max(6, Math.min(94, pDraw * (1 - pBttsYes) * 100))) },
       ],
     },
     {
       label: 'Draw + Over/Under 2.5 Goals',
       options: [
-        { label: 'Draw & Over 2.5', odds: +475 },
-        { label: 'Draw & Under 2.5', odds: +425 },
+        { label: 'Draw & Over 2.5', odds: probabilityToAmericanOdds(Math.max(6, Math.min(94, pDraw * pOver('2.5') * 100))) },
+        { label: 'Draw & Under 2.5', odds: probabilityToAmericanOdds(Math.max(6, Math.min(94, pDraw * (1 - pOver('2.5')) * 100))) },
       ],
     },
     {
       label: 'Double Chance + Total Goals',
       options: [
-        { label: `${home} or Draw & Over 1.5`, odds: -165 },
-        { label: `${away} or Draw & Over 1.5`, odds: -145 },
-        { label: `${home} or ${away} & Over 2.5`, odds: -135 },
+        { label: `${home} or Draw & Over 1.5`, odds: probabilityToAmericanOdds(Math.max(6, Math.min(94, (pHome + pDraw) * pOver('1.5') * 100))) },
+        { label: `${away} or Draw & Over 1.5`, odds: probabilityToAmericanOdds(Math.max(6, Math.min(94, (pAway + pDraw) * pOver('1.5') * 100))) },
+        { label: `${home} or ${away} & Over 2.5`, odds: probabilityToAmericanOdds(Math.max(6, Math.min(94, (pHome + pAway) * pOver('2.5') * 100))) },
       ],
     },
     {
       label: 'Double Chance + BTTS',
       options: [
-        { label: `${home} or Draw & BTTS Yes`, odds: -110 },
-        { label: `${away} or Draw & BTTS Yes`, odds: +105 },
+        { label: `${home} or Draw & BTTS Yes`, odds: probabilityToAmericanOdds(Math.max(6, Math.min(94, (pHome + pDraw) * pBttsYes * 100))) },
+        { label: `${away} or Draw & BTTS Yes`, odds: probabilityToAmericanOdds(Math.max(6, Math.min(94, (pAway + pDraw) * pBttsYes * 100))) },
       ],
     },
   ]);
 
+  // Individual team totals from past goals: team that usually scores 3+ gets low odds for Over 2.5 (almost sure).
+  const teamLineOdds = (teamProbs) => {
+    if (!hasTeamTotalsProbs || !teamProbs) {
+      const fallbacks = { '0.5': 0.7, '1.5': 0.4, '2.5': 0.2, '3.5': 0.08 };
+      return TEAM_TOTAL_LINES.flatMap((line) => {
+        const pOver = fallbacks[line];
+        return [
+          { label: `Over ${line}`, odds: probabilityToAmericanOdds(pOver * 100) },
+          { label: `Under ${line}`, odds: probabilityToAmericanOdds((1 - pOver) * 100) },
+        ];
+      });
+    }
+    return TEAM_TOTAL_LINES.flatMap((line) => {
+      const pOver = Math.max(0.01, Math.min(0.99, teamProbs[line] ?? 0.5));
+      return [
+        { label: `Over ${line}`, odds: probabilityToAmericanOdds(pOver * 100) },
+        { label: `Under ${line}`, odds: probabilityToAmericanOdds((1 - pOver) * 100) },
+      ];
+    });
+  };
+  const exactGoalsFromTeamProbs = (teamProbs) => {
+    if (!teamProbs) return [{ label: '0', odds: +210 }, { label: '1', odds: +250 }, { label: '2', odds: +320 }, { label: '3+', odds: +475 }];
+    const p0 = 1 - (teamProbs['0.5'] ?? 0.7);
+    const p1 = (teamProbs['0.5'] ?? 0.7) - (teamProbs['1.5'] ?? 0.4);
+    const p2 = (teamProbs['1.5'] ?? 0.4) - (teamProbs['2.5'] ?? 0.2);
+    const p3Plus = teamProbs['2.5'] ?? 0.2;
+    return [
+      { label: '0', odds: probabilityToAmericanOdds(Math.max(4, Math.min(96, p0 * 100))) },
+      { label: '1', odds: probabilityToAmericanOdds(Math.max(4, Math.min(96, p1 * 100))) },
+      { label: '2', odds: probabilityToAmericanOdds(Math.max(4, Math.min(96, p2 * 100))) },
+      { label: '3+', odds: probabilityToAmericanOdds(Math.max(4, Math.min(96, p3Plus * 100))) },
+    ];
+  };
   const individualTotals = [
     {
       label: `${home} - Total Goals`,
-      options: [
-        { label: 'Over 0.5', odds: -260 },
-        { label: 'Under 0.5', odds: +210 },
-        { label: 'Over 1.5', odds: +130 },
-        { label: 'Under 1.5', odds: -160 },
-        { label: 'Over 2.5', odds: +360 },
-        { label: 'Under 2.5', odds: -475 },
-        { label: 'Over 3.5', odds: +800 },
-        { label: 'Under 3.5', odds: -1600 },
-      ],
+      options: teamLineOdds(teamTotalsProbs?.home),
     },
     {
       label: `${away} - Total Goals`,
-      options: [
-        { label: 'Over 0.5', odds: -210 },
-        { label: 'Under 0.5', odds: +170 },
-        { label: 'Over 1.5', odds: +260 },
-        { label: 'Under 1.5', odds: -320 },
-        { label: 'Over 2.5', odds: +650 },
-        { label: 'Under 2.5', odds: -1100 },
-        { label: 'Over 3.5', odds: +1400 },
-        { label: 'Under 3.5', odds: -2500 },
-      ],
+      options: teamLineOdds(teamTotalsProbs?.away),
     },
     {
       label: `${home} - Exact Goals`,
-      options: [
-        { label: '0', odds: +210 },
-        { label: '1', odds: +250 },
-        { label: '2', odds: +320 },
-        { label: '3+', odds: +475 },
-      ],
+      options: exactGoalsFromTeamProbs(teamTotalsProbs?.home),
     },
     {
       label: `${away} - Exact Goals`,
-      options: [
-        { label: '0', odds: +170 },
-        { label: '1', odds: +260 },
-        { label: '2', odds: +475 },
-        { label: '3+', odds: +800 },
-      ],
+      options: exactGoalsFromTeamProbs(teamTotalsProbs?.away),
     },
   ];
 
@@ -2039,6 +2514,18 @@ function BetMarketsPanel({ match, probState, betslip, stake, totals, onToggleSel
                         </tr>
                       );
                     }
+                    // Only show options that are bettable (not near 0% or 100% certainty)
+                    const optionsWithProb = (mkt.options || []).map((opt) => ({
+                      ...opt,
+                      impliedProb: americanOddsToImpliedProb(opt.odds),
+                    }));
+                    const bettableOptions = optionsWithProb.filter(
+                      (opt) =>
+                        opt.impliedProb >= BETTABLE_PROB_MIN &&
+                        opt.impliedProb <= BETTABLE_PROB_MAX
+                    );
+                    if (bettableOptions.length === 0) return null;
+
                     return (
                       <tr
                         key={`${section.key}-${idx}`}
@@ -2058,8 +2545,17 @@ function BetMarketsPanel({ match, probState, betslip, stake, totals, onToggleSel
                         </td>
                         <td className="align-top px-3 sm:px-4 py-2.5 border-t border-white/5">
                           <div className="flex flex-wrap gap-1.5">
-                            {mkt.options?.map((opt, i) => {
+                            {bettableOptions.map((opt, i) => {
                               const selected = isSelected(marketLabel, opt.label);
+                              const p = opt.impliedProb;
+                              const styleBand =
+                                p >= 55 ? 'favorite' : p <= 45 ? 'underdog' : 'even';
+                              const styleClass =
+                                styleBand === 'favorite'
+                                  ? 'border-emerald-500/50 bg-emerald-500/10 hover:border-emerald-400/70'
+                                  : styleBand === 'underdog'
+                                    ? 'border-rose-500/40 bg-rose-500/5 hover:border-rose-400/60'
+                                    : 'border-white/10 bg-white/5 hover:border-yellow-400/70 hover:bg-yellow-500/10';
                               return (
                                 <button
                                   key={i}
@@ -2070,13 +2566,21 @@ function BetMarketsPanel({ match, probState, betslip, stake, totals, onToggleSel
                                   className={`inline-flex items-center justify-between gap-2 rounded-full border px-3 py-1.5 transition-all ${
                                     selected
                                       ? 'border-yellow-400 bg-yellow-500/30 shadow-[0_0_20px_rgba(250,204,21,0.45)] scale-[0.98]'
-                                      : 'border-white/10 bg-white/5 hover:border-yellow-400/70 hover:bg-yellow-500/10'
+                                      : styleClass
                                   }`}
                                 >
-                                  <span className="text-sm font-medium text-gray-100 truncate max-w-[120px] sm:max-w-[160px]">
+                                  <span className="text-xs sm:text-sm font-medium text-gray-100 text-left whitespace-normal break-words">
                                     {opt.label}
                                   </span>
-                                  <span className="text-sm font-bold text-yellow-300 font-mono">
+                                  <span
+                                    className={`text-sm font-bold font-mono ${
+                                      styleBand === 'favorite'
+                                        ? 'text-emerald-300'
+                                        : styleBand === 'underdog'
+                                          ? 'text-rose-300'
+                                          : 'text-yellow-300'
+                                    }`}
+                                  >
                                     {formatAmericanOdds(opt.odds)}
                                   </span>
                                 </button>
