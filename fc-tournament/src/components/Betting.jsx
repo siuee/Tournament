@@ -1280,6 +1280,7 @@ export default function Betting() {
             onToggleSelection={toggleSelection}
             onStakeChange={setStake}
             onClearAll={() => setBetslip([])}
+            onConfirmSlip={handleConfirmSlip}
             onBack={() => {
               setDetailMatch(null);
               setDetailTournament(null);
@@ -1548,6 +1549,7 @@ function MatchDetailView({
   onToggleSelection,
   onStakeChange,
   onClearAll,
+  onConfirmSlip,
   refreshFixtureStatsTrigger,
 }) {
   const fixtureId = getFixtureId(match);
@@ -1847,6 +1849,7 @@ function MatchDetailView({
             onToggleSelection={onToggleSelection}
             onStakeChange={onStakeChange}
             onClearAll={onClearAll}
+            onConfirmSlip={onConfirmSlip}
           />
         )}
       </div>
@@ -1854,7 +1857,22 @@ function MatchDetailView({
   );
 }
 
-function BetMarketsPanel({ match, probState, totalsProbs, halfTimeProbs, cleanSheetProbs, teamTotalsProbs, playerScoringProbs, betslip, stake, totals, onToggleSelection, onStakeChange, onClearAll }) {
+function BetMarketsPanel({
+  match,
+  probState,
+  totalsProbs,
+  halfTimeProbs,
+  cleanSheetProbs,
+  teamTotalsProbs,
+  playerScoringProbs,
+  betslip,
+  stake,
+  totals,
+  onToggleSelection,
+  onStakeChange,
+  onClearAll,
+  onConfirmSlip,
+}) {
   const home = match.home || 'Home';
   const away = match.away || 'Away';
   const homePlayers = match.homeTeamObj?.playerData || [];
@@ -2964,7 +2982,7 @@ function BetMarketsPanel({ match, probState, totalsProbs, halfTimeProbs, cleanSh
                 onToggleSelection={onToggleSelection}
                 onStakeChange={onStakeChange}
                 onClearAll={onClearAll}
-                onConfirmSlip={handleConfirmSlip}
+                onConfirmSlip={onConfirmSlip}
               />
             </motion.div>
           </motion.div>
@@ -2998,15 +3016,27 @@ function BetSlipCard({ betslip, stake, totals, onToggleSelection, onStakeChange,
   const [localStakes, setLocalStakes] = useState({});
   const [winDraft, setWinDraft] = useState({}); // raw Win input while typing to avoid overwriting mid-edit
   const [confirming, setConfirming] = useState(false);
+  const [placed, setPlaced] = useState(false);
+
+  useEffect(() => {
+    if (!placed) return;
+    const t = setTimeout(() => setPlaced(false), 1800);
+    return () => clearTimeout(t);
+  }, [placed]);
 
   const handleConfirm = async () => {
     if (!onConfirmSlip || confirming) return;
     setConfirming(true);
     try {
       await onConfirmSlip(betslip, localStakes);
-      onClearAll?.();
       setLocalStakes({});
       setWinDraft({});
+      setPlaced(true);
+      try {
+        const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/1435/1435-preview.mp3');
+        audio.volume = 0.6;
+        audio.play().catch(() => {});
+      } catch {}
     } catch (e) {
       console.error('Confirm slip error', e);
     }
@@ -3038,6 +3068,59 @@ function BetSlipCard({ betslip, stake, totals, onToggleSelection, onStakeChange,
             </span>
           )}
         </div>
+
+        {/* Center-screen confirmation overlay, localized to this slip */}
+        <AnimatePresence>
+          {placed && (
+            <motion.div
+              key="bet-placed-overlay"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[150] flex items-center justify-center bg-black/60 backdrop-blur-sm"
+            >
+              <motion.div
+                initial={{ scale: 0.4, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.8, opacity: 0 }}
+                transition={{ type: 'spring', stiffness: 260, damping: 20 }}
+                className="relative flex flex-col items-center gap-3 rounded-3xl bg-[#020617] border border-emerald-400/60 px-10 py-8 shadow-[0_0_60px_rgba(16,185,129,0.7)]"
+              >
+                <div className="relative mb-1">
+                  <motion.div
+                    initial={{ scale: 0.6, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    transition={{ delay: 0.05, type: 'spring', stiffness: 260, damping: 16 }}
+                    className="h-20 w-20 rounded-full bg-emerald-500 flex items-center justify-center shadow-[0_0_45px_rgba(16,185,129,0.9)]"
+                  >
+                    <motion.span
+                      initial={{ scale: 0.4 }}
+                      animate={{ scale: 1 }}
+                      transition={{ delay: 0.12, type: 'spring', stiffness: 260, damping: 18 }}
+                      className="text-4xl text-black font-black"
+                    >
+                      ✓
+                    </motion.span>
+                  </motion.div>
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.7 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ delay: 0.15 }}
+                    className="pointer-events-none absolute inset-0 rounded-full border-4 border-emerald-300/70"
+                  />
+                </div>
+                <div className="text-center">
+                  <p className="text-sm font-bold text-emerald-100 uppercase tracking-[0.18em] mb-1">
+                    Bet Placed
+                  </p>
+                  <p className="text-xs text-emerald-100/80">
+                    Now follow the match to know the results.
+                  </p>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {betslip.length === 0 ? (
           <p className="text-xs text-cyan-100/80">
