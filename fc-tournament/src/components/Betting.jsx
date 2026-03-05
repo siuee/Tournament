@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   Trophy,
   ChevronDown,
@@ -863,9 +863,12 @@ export default function Betting() {
     };
   }, [detailMatch, detailTab]);
 
-  // Load real form data for the two teams when viewing Form tab
+  // Load form from database only (no hard-coded form). Run when match is selected so Form tab has data.
   useEffect(() => {
-    if (!detailMatch || detailTab !== 'form') return;
+    if (!detailMatch) {
+      setFormState({ loading: false, homeForm: null, awayForm: null });
+      return;
+    }
 
     const homeTeam = detailMatch.homeTeamObj;
     const awayTeam = detailMatch.awayTeamObj;
@@ -879,13 +882,14 @@ export default function Betting() {
     const isCurrent1v1 = homePlayers.length === 1 && awayPlayers.length === 1;
 
     let cancelled = false;
+    setFormState({ loading: true, homeForm: null, awayForm: null });
 
     (async () => {
-      setFormState({ loading: true, homeForm: null, awayForm: null });
       try {
         const snap = await getDocs(collection(db, 'matches'));
         const all = snap.docs.map(d => ({ id: d.id, ...d.data() }));
 
+        // Same logic as Standings: only matches from DB where this team played; filter by 1v1 or 2v2.
         const computeTeamForm = (team, want1v1) => {
           const teamMatches = all.filter(m => {
             const isTeam =
@@ -925,7 +929,7 @@ export default function Betting() {
     return () => {
       cancelled = true;
     };
-  }, [detailMatch, detailTab]);
+  }, [detailMatch]);
 
   // Load historical matches and compute win/draw/loss probabilities when a match is selected (for Probability tab and for Bet odds).
   useEffect(() => {
@@ -2604,44 +2608,56 @@ function BetMarketsPanel({ match, probState, totalsProbs, halfTimeProbs, cleanSh
         ))}
       </div>
 
-      {/* Right side: fixed bet slip on large screens, inline on mobile */}
-      {/* Mobile / small screens: slip appears below markets and scrolls normally */}
-      <div id="bet-slip-section" className="mt-4 w-full max-w-sm lg:hidden scroll-mt-4">
-        <BetSlipCard
-          betslip={betslip}
-          stake={stake}
-          totals={totals}
-          onToggleSelection={onToggleSelection}
-          onStakeChange={onStakeChange}
-          onClearAll={onClearAll}
-        />
-      </div>
+      {/* Bet slip: only appears when you have picks — materializes out of the air */}
+      <AnimatePresence mode="wait">
+        {betslip.length > 0 && (
+          <motion.div
+            key="bet-slip"
+            initial={{ opacity: 0, scale: 0.6, y: 16, filter: 'blur(8px)' }}
+            animate={{ opacity: 1, scale: 1, y: 0, filter: 'blur(0px)' }}
+            exit={{ opacity: 0, scale: 0.88, filter: 'blur(4px)' }}
+            transition={{ type: 'spring', damping: 22, stiffness: 280 }}
+            className="mt-4 w-full max-w-sm lg:mt-0 lg:fixed lg:top-4 lg:right-8 lg:w-80 lg:max-w-xs lg:max-h-[calc(100vh-2rem)] z-[100] scroll-mt-4"
+            id="bet-slip-section"
+          >
+            <motion.div
+              initial={{ boxShadow: '0 0 0 0 rgba(34, 211, 238, 0)' }}
+              animate={{ boxShadow: '0 0 50px 2px rgba(34, 211, 238, 0.35), 0 0 90px 4px rgba(244, 63, 94, 0.15)' }}
+              transition={{ delay: 0.15, duration: 0.4 }}
+              className="rounded-2xl"
+            >
+              <BetSlipCard
+                betslip={betslip}
+                stake={stake}
+                totals={totals}
+                onToggleSelection={onToggleSelection}
+                onStakeChange={onStakeChange}
+                onClearAll={onClearAll}
+              />
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-      {/* Mobile: floating pill to jump to bet slip — above navbar, labeled for clarity */}
-      <motion.button
-        onClick={() => document.getElementById('bet-slip-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-        className="lg:hidden fixed bottom-36 right-4 z-[105] rounded-full bg-gradient-to-br from-cyan-500 to-cyan-700 shadow-[0_4px_20px_rgba(34,211,238,0.5)] border border-cyan-300/50 flex items-center justify-center gap-1.5 px-3 py-2.5 text-white font-black uppercase text-[10px] tracking-wider"
-        whileHover={{ scale: 1.05 }}
-        whileTap={{ scale: 0.95 }}
-        aria-label="Go to bet slip"
-      >
-        <TicketPercent className="w-4 h-4 shrink-0" />
-        <span>Slip</span>
-      </motion.button>
-
-      {/* Desktop: slip fixed to viewport right, does not move when markets scroll */}
-      <div className="hidden lg:block">
-        <div className="fixed top-[75vh] right-8 w-80 max-w-xs -translate-y-1/2">
-          <BetSlipCard
-            betslip={betslip}
-            stake={stake}
-            totals={totals}
-            onToggleSelection={onToggleSelection}
-            onStakeChange={onStakeChange}
-            onClearAll={onClearAll}
-          />
-        </div>
-      </div>
+      {/* Mobile: floating pill to jump to bet slip when you have picks */}
+      <AnimatePresence>
+        {betslip.length > 0 && (
+          <motion.button
+            key="slip-pill"
+            initial={{ opacity: 0, scale: 0.5 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.5 }}
+            onClick={() => document.getElementById('bet-slip-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+            className="lg:hidden fixed bottom-36 right-4 z-[105] rounded-full bg-gradient-to-br from-cyan-500 to-cyan-700 shadow-[0_4px_20px_rgba(34,211,238,0.5)] border border-cyan-300/50 flex items-center justify-center gap-1.5 px-3 py-2.5 text-white font-black uppercase text-[10px] tracking-wider"
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            aria-label="Go to bet slip"
+          >
+            <TicketPercent className="w-4 h-4 shrink-0" />
+            <span>Slip</span>
+          </motion.button>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -2651,33 +2667,33 @@ function BetSlipCard({ betslip, stake, totals, onToggleSelection, onStakeChange,
   const [winDraft, setWinDraft] = useState({}); // raw Win input while typing to avoid overwriting mid-edit
 
   return (
-    <div className="rounded-2xl border border-cyan-400/60 bg-gradient-to-br from-[#020617] via-[#020617] to-[#0f172a] shadow-[0_0_45px_rgba(34,211,238,0.45)] p-4 sm:p-5 relative overflow-hidden">
+    <div className="rounded-2xl border border-cyan-400/60 bg-gradient-to-br from-[#020617] via-[#020617] to-[#0f172a] shadow-[0_0_45px_rgba(34,211,238,0.45)] p-3 relative overflow-hidden flex flex-col min-h-0 max-h-[min(calc(100vh-5rem),32rem)] text-xs font-sans">
       <div className="pointer-events-none absolute inset-0 opacity-40 bg-[radial-gradient(circle_at_top,_rgba(56,189,248,0.45),transparent_55%),radial-gradient(circle_at_bottom,_rgba(244,63,94,0.45),transparent_55%)]" />
-      <div className="relative">
-      <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
+      <div className="relative flex flex-col min-h-0 flex-1 flex">
+      <div className="flex items-center justify-between mb-2 flex-shrink-0">
+          <div className="flex items-center gap-1.5">
             <div className="relative">
               <div className="absolute inset-0 blur-md bg-cyan-400/60 rounded-full" />
-              <Coins className="relative w-5 h-5 text-cyan-200 drop-shadow-[0_0_12px_rgba(34,211,238,0.9)]" />
+              <Coins className="relative w-4 h-4 text-cyan-200 drop-shadow-[0_0_12px_rgba(34,211,238,0.9)]" />
             </div>
             <div>
-              <h3 className="text-base font-black uppercase tracking-[0.18em] text-cyan-100 drop-shadow-[0_0_10px_rgba(34,211,238,0.9)]">
+              <h3 className="text-sm font-black uppercase tracking-wider text-cyan-100 drop-shadow-[0_0_10px_rgba(34,211,238,0.9)]">
                 Bet Slip
               </h3>
-              <p className="text-xs text-cyan-300/80 uppercase tracking-[0.18em]">
+              <p className="text-[10px] text-cyan-300/80 uppercase tracking-wider">
                 Fun only
               </p>
             </div>
           </div>
           {betslip.length > 0 && (
-            <span className="text-xs font-bold text-fuchsia-300 uppercase tracking-[0.18em] bg-fuchsia-500/10 border border-fuchsia-400/40 rounded-full px-2 py-0.5">
+            <span className="text-[10px] font-bold text-fuchsia-300 uppercase tracking-wider bg-fuchsia-500/10 border border-fuchsia-400/40 rounded-full px-1.5 py-0.5">
               {betslip.length} picks
             </span>
           )}
         </div>
 
         {betslip.length === 0 ? (
-          <p className="text-sm text-cyan-100/80">
+          <p className="text-xs text-cyan-100/80">
             Tap any odds on the left to add a selection.
           </p>
         ) : (
@@ -2694,7 +2710,7 @@ function BetSlipCard({ betslip, stake, totals, onToggleSelection, onStakeChange,
               return (
                 <div
                   key={sel.key}
-                  className="relative rounded-2xl border border-cyan-500/40 bg-slate-950/75 px-3 py-2.5 shadow-[0_0_22px_rgba(15,23,42,0.95)]"
+                  className="relative rounded-xl border border-cyan-500/40 bg-slate-950/75 px-2 py-1.5 shadow-[0_0_22px_rgba(15,23,42,0.95)]"
                 >
                   <button
                     type="button"
@@ -2706,25 +2722,25 @@ function BetSlipCard({ betslip, stake, totals, onToggleSelection, onStakeChange,
                         sel.odds,
                       )
                     }
-                    className="absolute -top-1 -right-1 text-xs text-cyan-200 hover:text-white bg-slate-900/80 border border-cyan-400/60 rounded-full px-1.5"
+                    className="absolute -top-0.5 -right-0.5 text-[10px] leading-none text-cyan-200 hover:text-white bg-slate-900/80 border border-cyan-400/60 rounded-full w-4 h-4 flex items-center justify-center p-0"
                   >
                     ×
                   </button>
-                  <p className="text-xs font-bold text-cyan-300 uppercase tracking-[0.2em] mb-1">
+                  <p className="text-[10px] font-bold text-cyan-300 uppercase tracking-wider mb-0.5 truncate">
                     {sel.market}
                   </p>
-                  <p className="text-sm font-semibold text-slate-50 mb-0.5 line-clamp-1">
+                  <p className="text-xs font-semibold text-slate-50 mb-0 line-clamp-1">
                     {sel.matchLabel}
                   </p>
-                  <div className="flex items-center justify-between text-sm text-slate-200 mt-0.5">
-                    <span>{sel.selection}</span>
-                    <span className="font-semibold text-cyan-300 drop-shadow-[0_0_8px_rgba(34,211,238,0.8)]">
+                  <div className="flex items-center justify-between text-xs text-slate-200 mt-0">
+                    <span className="truncate mr-1">{sel.selection}</span>
+                    <span className="font-semibold text-cyan-300 drop-shadow-[0_0_8px_rgba(34,211,238,0.8)] shrink-0">
                       {formatAmericanOdds(sel.odds)}
                     </span>
                   </div>
-                  <div className="mt-2 grid grid-cols-2 gap-2">
-                    <div className="flex flex-col gap-0.5">
-                      <span className="text-xs font-bold text-cyan-300/80 uppercase tracking-wider">Risk</span>
+                  <div className="mt-1.5 grid grid-cols-2 gap-1.5">
+                    <div className="flex flex-col gap-0">
+                      <span className="text-[10px] font-bold text-cyan-300/80 uppercase tracking-wider">Risk</span>
                       <input
                         type="text"
                         inputMode="decimal"
@@ -2734,11 +2750,11 @@ function BetSlipCard({ betslip, stake, totals, onToggleSelection, onStakeChange,
                           const v = e.target.value.replace(/[^0-9.]/g, '');
                           setLocalStakes((prev) => ({ ...prev, [sel.key]: v }));
                         }}
-                        className="w-full min-w-0 rounded-xl bg-slate-900/80 border border-cyan-500/50 px-2.5 py-1.5 text-sm text-cyan-100 placeholder:text-slate-500 focus:outline-none focus:border-cyan-400"
+                        className="w-full min-w-0 rounded-lg bg-slate-900/80 border border-cyan-500/50 px-2 py-1 text-xs text-cyan-100 placeholder:text-slate-500 focus:outline-none focus:border-cyan-400"
                       />
                     </div>
-                    <div className="flex flex-col gap-0.5">
-                      <span className="text-xs font-bold text-emerald-300/80 uppercase tracking-wider">Win</span>
+                    <div className="flex flex-col gap-0">
+                      <span className="text-[10px] font-bold text-emerald-300/80 uppercase tracking-wider">Win</span>
                       <input
                         type="text"
                         inputMode="decimal"
@@ -2755,7 +2771,7 @@ function BetSlipCard({ betslip, stake, totals, onToggleSelection, onStakeChange,
                           delete next[sel.key];
                           return next;
                         })}
-                        className="w-full min-w-0 rounded-xl bg-slate-900/80 border border-emerald-400/50 px-2.5 py-1.5 text-sm text-emerald-200 placeholder:text-slate-500 focus:outline-none focus:border-emerald-400"
+                        className="w-full min-w-0 rounded-lg bg-slate-900/80 border border-emerald-400/50 px-2 py-1 text-xs text-emerald-200 placeholder:text-slate-500 focus:outline-none focus:border-emerald-400"
                       />
                     </div>
                   </div>
@@ -2765,24 +2781,24 @@ function BetSlipCard({ betslip, stake, totals, onToggleSelection, onStakeChange,
 
             return (
               <>
-                <div className="space-y-3 mb-4 max-h-64 overflow-y-auto pr-1 custom-scrollbar-thin">
+                <div className="space-y-2 flex-1 min-h-0 overflow-y-auto pr-1 custom-scrollbar-thin mb-2">
                   {renderedSelections}
                 </div>
 
-                <div className="space-y-3 border-t border-cyan-500/40 pt-3">
-                  <div className="flex items-center justify-between text-sm text-slate-200">
+                <div className="space-y-1.5 border-t border-cyan-500/40 pt-2 flex-shrink-0">
+                  <div className="flex items-center justify-between text-xs text-slate-200">
                     <span>Total amount placed</span>
                     <span className="font-bold text-cyan-200">
                       {totalStake ? totalStake.toFixed(2) : '--'}
                     </span>
                   </div>
-                  <div className="flex items-center justify-between text-sm text-slate-200">
+                  <div className="flex items-center justify-between text-xs text-slate-200">
                     <span>Total potential win</span>
                     <span className="font-bold text-emerald-300">
                       {totalWin ? totalWin.toFixed(2) : '--'}
                     </span>
                   </div>
-                  <div className="flex items-center justify-between text-sm text-slate-200">
+                  <div className="flex items-center justify-between text-xs text-slate-200">
                     <span>Total return</span>
                     <span className="font-bold text-emerald-200">
                       {totalStake || totalWin ? (totalStake + totalWin).toFixed(2) : '--'}
@@ -2793,21 +2809,21 @@ function BetSlipCard({ betslip, stake, totals, onToggleSelection, onStakeChange,
                     onClick={() => { onClearAll?.(); setLocalStakes({}); setWinDraft({}); }}
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
-                    className="w-full mt-1 py-2 rounded-xl border border-red-400/60 bg-red-500/10 text-red-300 text-xs font-black uppercase tracking-[0.18em] flex items-center justify-center gap-1.5 hover:bg-red-500/20 transition-colors"
+                    className="w-full mt-0.5 py-1.5 rounded-lg border border-red-400/60 bg-red-500/10 text-red-300 text-[10px] font-black uppercase tracking-wider flex items-center justify-center gap-1 hover:bg-red-500/20 transition-colors"
                   >
-                    <Trash2 className="w-3.5 h-3.5" />
+                    <Trash2 className="w-3 h-3" />
                     Clear selection
                   </motion.button>
                   <motion.button
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
-                    className="w-full mt-1 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 via-fuchsia-500 to-emerald-400 text-black text-sm font-black uppercase tracking-[0.2em] flex items-center justify-center gap-1 shadow-[0_0_26px_rgba(6,182,212,0.75)]"
+                    className="w-full mt-0.5 py-2 rounded-lg bg-gradient-to-r from-cyan-500 via-fuchsia-500 to-emerald-400 text-black text-xs font-black uppercase tracking-wider flex items-center justify-center gap-1 shadow-[0_0_26px_rgba(6,182,212,0.75)]"
                     type="button"
                   >
-                    <Percent className="w-3.5 h-3.5" />
+                    <Percent className="w-3 h-3" />
                     Confirm Slip
                   </motion.button>
-                  <p className="text-xs text-cyan-200/80 leading-relaxed">
+                  <p className="text-[10px] text-cyan-200/80 leading-snug">
                     For entertainment only. No real bets.
                   </p>
                 </div>

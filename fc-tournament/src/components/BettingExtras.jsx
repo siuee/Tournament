@@ -10,7 +10,7 @@ export function ProbabilityPanel({ match, probabilities }) {
 
   return (
     <div className="rounded-2xl border border-cyan-500/40 bg-[#020617]/90 p-4 space-y-3 text-sm text-slate-100 shadow-[0_0_24px_rgba(34,211,238,0.6)]">
-      <p className="font-semibold text-cyan-100">Win probability (fun estimate)</p>
+      <p className="font-semibold text-cyan-100">AI prediction Winning Probability</p>
       <div className="space-y-2">
         {rows.map((row) => (
           <div key={row.label} className="space-y-1">
@@ -29,9 +29,6 @@ export function ProbabilityPanel({ match, probabilities }) {
           </div>
         ))}
       </div>
-      <p className="text-[10px] text-slate-400">
-        Probabilities are derived from Banana FC standings and goal stats, and are for entertainment only.
-      </p>
     </div>
   );
 }
@@ -45,7 +42,7 @@ export function FormPanel({ homeName, awayName, homeForm, awayForm, emptyMessage
         <FormRow label={awayName} form={awayForm} accent="text-sky-400" emptyMessage={emptyMessage} />
       </div>
       <p className="text-[10px] text-slate-400">
-        W = Win, D = Draw, L = Loss. Form strings are approximations based on current Banana FC league stats.
+        W = Win, D = Draw, L = Loss. Form is from recorded matches only (last 5). Blank = no matches in that format yet.
       </p>
     </div>
   );
