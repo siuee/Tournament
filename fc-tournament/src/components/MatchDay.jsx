@@ -28,7 +28,7 @@ export default function MatchDay({ onGoalScored }) {
     homeTeam: null, awayTeam: null, homeScore: '', awayScore: '', playerGoals: {} 
   });
 
-  const [newTournament, setNewTournament] = useState({ type: '', format: '2v2', teams: [] });
+  const [newTournament, setNewTournament] = useState({ type: '', format: '2v2', durationDays: 30, teams: [] });
   const [selectedForTeam, setSelectedForTeam] = useState([]);
   const [teamNameInput, setTeamNameInput] = useState('');
   const [editingTeamName, setEditingTeamName] = useState(null);
@@ -183,10 +183,16 @@ export default function MatchDay({ onGoalScored }) {
     setScreenShake(true);
     setTimeout(() => setScreenShake(false), 400);
     try {
-      await addDoc(collection(db, "tournaments"), { ...newTournament, status: 'active', createdAt: new Date() });
-      setShowCreateModal(false); 
+      const createdAt = new Date();
+      await addDoc(collection(db, "tournaments"), {
+        ...newTournament,
+        durationDays: newTournament.durationDays ?? 30,
+        status: 'active',
+        createdAt,
+      });
+      setShowCreateModal(false);
       setWizardStep(1);
-      setNewTournament({ type: '', format: '2v2', teams: [] });
+      setNewTournament({ type: '', format: '2v2', durationDays: 30, teams: [] });
       setTeamNameInput('');
       fetchData();
     } catch (e) { console.error(e); }
@@ -610,7 +616,7 @@ export default function MatchDay({ onGoalScored }) {
                   <div className="mb-8 sm:mb-12 text-center mt-4 sm:mt-0">
                     <p className="text-yellow-500 text-[10px] font-black tracking-widest uppercase mb-1 sm:mb-2">Tournament Builder</p>
                     <h2 className="text-3xl sm:text-4xl font-black italic uppercase tracking-tighter text-white drop-shadow-md">
-                      {wizardStep === 1 ? 'Select League' : wizardStep === 2 ? 'Format' : 'Draft Teams'}
+                      {wizardStep === 1 ? 'Select League' : wizardStep === 2 ? 'Format' : wizardStep === 3 ? 'League Duration' : 'Draft Teams'}
                     </h2>
                   </div>
 
@@ -641,6 +647,35 @@ export default function MatchDay({ onGoalScored }) {
                   )}
 
                   {wizardStep === 3 && (
+                    <div className="space-y-4">
+                      <p className="text-sm text-gray-400 text-center">How many days will the league run? Fixtures will cycle through all team pairings until the end.</p>
+                      <div className="grid grid-cols-3 gap-3 sm:gap-4">
+                        {[30, 60, 90].map((days) => (
+                          <motion.button
+                            key={days}
+                            onClick={() => { setNewTournament({ ...newTournament, durationDays: days }); setWizardStep(4); }}
+                            whileHover={{ scale: 1.02 }}
+                            whileTap={{ scale: 0.98 }}
+                            className={`p-6 sm:p-8 rounded-2xl sm:rounded-3xl border flex flex-col items-center justify-center ${newTournament.durationDays === days ? 'bg-yellow-500/10 border-yellow-500 text-yellow-500' : 'bg-black border-white/5 hover:border-yellow-500/50 text-gray-300'}`}
+                          >
+                            <span className="text-2xl sm:text-3xl font-black">{days}</span>
+                            <span className="text-[10px] font-bold uppercase tracking-wider mt-1">days</span>
+                          </motion.button>
+                        ))}
+                      </div>
+                      <div className="flex justify-center pt-2">
+                        <button
+                          type="button"
+                          onClick={() => setWizardStep(2)}
+                          className="text-xs text-gray-500 hover:text-yellow-500 uppercase tracking-wider"
+                        >
+                          Back
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {wizardStep === 4 && (
                     <div className="space-y-6 sm:space-y-8">
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 max-h-64 sm:max-h-72 overflow-y-auto pr-2 custom-scrollbar">
                         {players.map(p => {
@@ -668,6 +703,9 @@ export default function MatchDay({ onGoalScored }) {
                           />
                         </div>
                       )}
+                      <div className="flex justify-center pb-1">
+                        <button type="button" onClick={() => setWizardStep(3)} className="text-xs text-gray-500 hover:text-yellow-500 uppercase tracking-wider">Back</button>
+                      </div>
                       <div className="flex flex-col gap-3 sm:gap-4">
                         <motion.button disabled={selectedForTeam.length < (newTournament.format === '2v2' ? 2 : 1)} onClick={addTeamToTournament} whileHover={{ scale: selectedForTeam.length >= (newTournament.format === '2v2' ? 2 : 1) ? 1.02 : 1 }} whileTap={{ scale: 0.98 }} className="w-full py-4 sm:py-5 bg-black border border-white/10 rounded-[20px] font-black text-[10px] sm:text-xs uppercase tracking-widest text-white hover:bg-yellow-500/10 hover:border-yellow-500 hover:text-yellow-500 disabled:opacity-30">
                           Lock Team ({newTournament.teams.length} Added)

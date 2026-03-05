@@ -10,6 +10,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 export default function Standings() {
   const [players, setPlayers] = useState([]);
   const [leagues, setLeagues] = useState({});
+  const [leagueFinished, setLeagueFinished] = useState({}); // groupKey -> true if league duration has passed
   const [loading, setLoading] = useState(true);
   const [gbFormat, setGbFormat] = useState('2v2');
 
@@ -54,6 +55,7 @@ export default function Standings() {
         
         const matchHistory = mSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         const leagueGroups = {};
+        const leagueFinished = {}; // groupKey -> true if at least one tournament in this league has ended (duration passed)
 
         tSnap.docs.forEach(doc => {
           const data = doc.data();
@@ -62,6 +64,15 @@ export default function Standings() {
           
           const groupKey = `${type}_${format}`;
           if (!leagueGroups[groupKey]) leagueGroups[groupKey] = [];
+
+          const durationDays = Number(data.durationDays);
+          const createdAtRaw = data.createdAt;
+          const createdAt = createdAtRaw?.toDate ? createdAtRaw.toDate() : createdAtRaw ? new Date(createdAtRaw) : null;
+          if (createdAt && !Number.isNaN(createdAt.getTime()) && durationDays > 0) {
+            const endDate = new Date(createdAt.getFullYear(), createdAt.getMonth(), createdAt.getDate());
+            endDate.setDate(endDate.getDate() + durationDays);
+            if (endDate.getTime() <= Date.now()) leagueFinished[groupKey] = true;
+          }
 
           if (data.teams) {
             data.teams.forEach(team => {
@@ -83,8 +94,9 @@ export default function Standings() {
                 if (idx < 5) form.push(res);
               });
 
+              const pts = 3 * w + d;
               leagueGroups[groupKey].push({
-                ...team, mp: teamMatches.length, w, d, l, gs, gc, gd: gs - gc, form, format, type 
+                ...team, mp: teamMatches.length, w, d, l, gs, gc, gd: gs - gc, pts, form, format, type 
               });
 
               if (team.playerData) {
@@ -113,6 +125,7 @@ export default function Standings() {
           leagueGroups[key].sort((a, b) => (b.pts || 0) - (a.pts || 0) || (b.gd || 0) - (a.gd || 0));
         });
         setLeagues(leagueGroups);
+        setLeagueFinished(leagueFinished);
 
         const totalWeight = basePlayers.reduce((acc, p) => acc + (p.tGoals * 5 + p.tAssists * 3), 0);
         const playersWithStats = basePlayers.map(p => {
@@ -171,11 +184,19 @@ export default function Standings() {
               <img src={leagueIcons[leagueType]} className="absolute -right-10 -bottom-10 w-48 h-48 object-contain opacity-[0.02] pointer-events-none" alt="" />
               
               <div className="flex justify-between items-center mb-4 sm:mb-6 relative z-10">
-                <div className="flex items-center gap-3">
-                   <h2 className="text-2xl sm:text-3xl font-black italic tracking-tighter uppercase leading-none text-transparent bg-clip-text bg-gradient-to-r from-neonBlue to-[#00ff88]">
-                     <span className="text-neonBlue lowercase italic">e</span>{leagueType.replace('e', '')}
-                   </h2>
-                   <span className="text-[9px] font-black uppercase tracking-widest bg-[#00ff88]/10 text-[#00ff88] px-2 py-1 rounded-md border border-[#00ff88]/20">{leagueFormat}</span>
+                <div className="flex flex-col gap-1 sm:gap-1.5">
+                  <div className="flex items-center gap-3">
+                    <h2 className="text-2xl sm:text-3xl font-black italic tracking-tighter uppercase leading-none text-transparent bg-clip-text bg-gradient-to-r from-neonBlue to-[#00ff88]">
+                      <span className="text-neonBlue lowercase italic">e</span>{leagueType.replace('e', '')}
+                    </h2>
+                    <span className="text-[9px] font-black uppercase tracking-widest bg-[#00ff88]/10 text-[#00ff88] px-2 py-1 rounded-md border border-[#00ff88]/20">{leagueFormat}</span>
+                  </div>
+                  {leagueFinished[groupKey] && leagueData[0] && (
+                    <p className="text-xs sm:text-sm font-bold text-[#00ff88] flex items-center gap-1.5">
+                      <Trophy className="w-3.5 h-3.5 shrink-0" />
+                      Winner: {leagueData[0].name || (leagueData[0].playerData?.map(p => p?.name || '').filter(Boolean).join(' & ') || '—')}
+                    </p>
+                  )}
                 </div>
                 <img src={leagueIcons[leagueType]} className="w-10 h-10 object-contain brightness-125 drop-shadow-[0_0_10px_rgba(0,243,255,0.3)]" alt="" />
               </div>

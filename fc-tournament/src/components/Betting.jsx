@@ -19,7 +19,7 @@ import {
   Loader2,
 } from 'lucide-react';
 import { db } from '../firebase';
-import { collection, getDocs, getDoc, doc, setDoc, updateDoc, addDoc, increment, query, orderBy, limit } from 'firebase/firestore';
+import { collection, getDocs, getDoc, doc, setDoc, updateDoc, addDoc, increment, query, orderBy, limit, onSnapshot } from 'firebase/firestore';
 import { formatMatchHistoryTeam, formatMatchDateTime, matchTeamToMatch } from '../lib/utils';
 import { formatCountShort } from '../lib/utils';
 import { ProbabilityPanel, FormPanel } from './BettingExtras';
@@ -112,6 +112,106 @@ function generateLeagueFixtures(tournament, selectedDate) {
       });
       idx += 1;
     }
+  }
+  return fixtures;
+}
+
+/** Ordered pairings (home, away) in same order as generateLeagueFixtures: (0,1), (0,2), (1,2), ... */
+function getLeaguePairings(tournament) {
+  const teams = tournament.teams || [];
+  const pairings = [];
+  for (let i = 0; i < teams.length; i++) {
+    for (let j = i + 1; j < teams.length; j++) {
+      pairings.push({ home: teams[i], away: teams[j], homeIdx: i, awayIdx: j });
+    }
+  }
+  return pairings;
+}
+
+/**
+ * Upcoming fixtures for a tournament: next N fixtures by match number (round-robin cycle).
+ * Once a fixture's score is posted, it drops off and the next pairing in cycle appears.
+ * Respects tournament duration: no fixtures after endDate (createdAt + durationDays).
+ */
+function getUpcomingFixtures(tournament, playedMatches, selectedDate, maxFixtures = 30) {
+  const pairings = getLeaguePairings(tournament);
+  if (pairings.length === 0) return [];
+
+  const playedForT = Array.isArray(playedMatches)
+    ? playedMatches.filter((m) => m.tournamentId === tournament.id)
+    : [];
+  let nextMatchNumber = 1;
+  playedForT.forEach((m) => {
+    const n = Number(m.matchNumber);
+    if (!Number.isNaN(n) && n >= nextMatchNumber) nextMatchNumber = n + 1;
+  });
+
+  const durationDays = Number(tournament.durationDays);
+  const createdAtRaw = tournament.createdAt;
+  const createdAt = createdAtRaw?.toDate ? createdAtRaw.toDate() : createdAtRaw ? new Date(createdAtRaw) : null;
+  if (createdAt && !Number.isNaN(createdAt.getTime()) && durationDays > 0) {
+    const endDate = new Date(createdAt.getFullYear(), createdAt.getMonth(), createdAt.getDate());
+    endDate.setDate(endDate.getDate() + durationDays);
+    const selDay = selectedDate instanceof Date ? selectedDate : new Date(selectedDate);
+    const selNorm = new Date(selDay.getFullYear(), selDay.getMonth(), selDay.getDate());
+    if (selNorm.getTime() > endDate.getTime()) return [];
+  }
+
+  const baseDate = selectedDate instanceof Date ? selectedDate : new Date();
+  const base =
+    new Date(
+      baseDate.getFullYear(),
+      baseDate.getMonth(),
+      baseDate.getDate(),
+      12,
+      0,
+      0,
+      0,
+    ).getTime() + 1000 * 60 * 30;
+  const fixtures = [];
+  for (let k = 0; k < maxFixtures; k++) {
+    const matchNum = nextMatchNumber + k;
+    const pairingIndex = (matchNum - 1) % pairings.length;
+    const { home, away } = pairings[pairingIndex];
+    const homeShort = teamLabel(home);
+    const awayShort = teamLabel(away);
+    const id = `${makeTeamId(home, pairings[pairingIndex].homeIdx)}-vs-${makeTeamId(away, pairings[pairingIndex].awayIdx)}-${matchNum}`;
+    const kickoff = new Date(base + k * 1000 * 60 * 45);
+    fixtures.push({
+      id,
+      matchNumber: matchNum,
+      kickoff,
+      label: 'League Fixture',
+      home: homeShort,
+      away: awayShort,
+      homeTeamObj: home,
+      awayTeamObj: away,
+      markets: {
+        moneyline: {
+          label: 'Moneyline',
+          options: [
+            { id: `${id}-home-ml`, label: homeShort, odds: -110 },
+            { id: `${id}-draw-ml`, label: 'Draw', odds: +260 },
+            { id: `${id}-away-ml`, label: awayShort, odds: +170 },
+          ],
+        },
+        spread: {
+          label: 'Handicap',
+          lineNote: 'League handicap',
+          options: [
+            { id: `${id}-home-hcap`, label: `${homeShort} -0.5`, odds: +120 },
+            { id: `${id}-away-hcap`, label: `${awayShort} +0.5`, odds: -140 },
+          ],
+        },
+        total: {
+          label: 'Total Goals',
+          options: [
+            { id: `${id}-over-3_5`, label: 'Over 3.5', odds: +135 },
+            { id: `${id}-under-3_5`, label: 'Under 3.5', odds: -160 },
+          ],
+        },
+      },
+    });
   }
   return fixtures;
 }
@@ -661,14 +761,28 @@ function getFixtureId(match) {
   return `${slug(match?.home || 'home')}-vs-${slug(match?.away || 'away')}-${t}`;
 }
 
-/** Find a played match from Firestore (MatchDay results) that matches this betting fixture (same tournament + same home/away teams). */
+/** Build the same fixture id that getUpcomingFixtures would assign for this played match (for finishedFixtureIds). */
+function getFixtureIdFromPlayedMatch(playedMatch, tournament) {
+  if (!playedMatch?.tournamentId || !tournament?.id || playedMatch.tournamentId !== tournament.id) return null;
+  const pairings = getLeaguePairings(tournament);
+  if (pairings.length === 0) return null;
+  const matchNum = Number(playedMatch.matchNumber);
+  if (Number.isNaN(matchNum)) return null;
+  const pairingIndex = (matchNum - 1) % pairings.length;
+  const { home, away, homeIdx, awayIdx } = pairings[pairingIndex];
+  return `${makeTeamId(home, homeIdx)}-vs-${makeTeamId(away, awayIdx)}-${matchNum}`;
+}
+
+/** Find a played match from Firestore (MatchDay results) that matches this betting fixture (same tournament + same home/away teams + same match number when present). */
 function findPlayedMatchForFixture(fixture, tournament, playedMatches) {
   if (!fixture?.homeTeamObj || !fixture?.awayTeamObj || !tournament?.id || !Array.isArray(playedMatches)) return null;
   return playedMatches.find(
-    (m) =>
-      m.tournamentId === tournament.id &&
-      matchTeamToMatch(fixture.homeTeamObj, m, 'home') &&
-      matchTeamToMatch(fixture.awayTeamObj, m, 'away')
+    (m) => {
+      if (m.tournamentId !== tournament.id) return false;
+      if (!matchTeamToMatch(fixture.homeTeamObj, m, 'home') || !matchTeamToMatch(fixture.awayTeamObj, m, 'away')) return false;
+      if (fixture.matchNumber != null && m.matchNumber != null) return Number(m.matchNumber) === Number(fixture.matchNumber);
+      return true;
+    }
   ) || null;
 }
 
@@ -1092,41 +1206,78 @@ export default function Betting() {
   const [refreshFixtureStatsTrigger, setRefreshFixtureStatsTrigger] = useState(0);
   const [playedMatches, setPlayedMatches] = useState([]);
 
-  // Load played matches from Firestore (MatchDay results) to show final scores and lock markets
+  // Subscribe to played matches from Firestore (MatchDay results) so new results appear without refresh
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const q = query(
-          collection(db, 'matches'),
-          orderBy('createdAt', 'desc'),
-          limit(300)
-        );
-        const snap = await getDocs(q);
-        if (cancelled) return;
+    const q = query(
+      collection(db, 'matches'),
+      orderBy('createdAt', 'desc'),
+      limit(300)
+    );
+    const unsubscribe = onSnapshot(
+      q,
+      (snap) => {
         const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
         setPlayedMatches(list);
-      } catch (e) {
+      },
+      (e) => {
         console.error('Failed to load played matches for betting:', e);
-        if (!cancelled) setPlayedMatches([]);
+        setPlayedMatches([]);
       }
-    })();
-    return () => { cancelled = true; };
+    );
+    return () => unsubscribe();
   }, []);
 
   // Set of fixture IDs that have a final result (from MatchDay) so we lock betting for them
   const finishedFixtureIds = useMemo(() => {
     const set = new Set();
     if (!Array.isArray(playedMatches) || playedMatches.length === 0) return set;
-    tournaments.forEach((t) => {
-      const matches = generateLeagueFixtures(t, selectedDate);
-      matches.forEach((m) => {
-        const played = findPlayedMatchForFixture(m, t, playedMatches);
-        if (played != null) set.add(getFixtureId(m));
-      });
+    playedMatches.forEach((pm) => {
+      const t = tournaments.find((x) => x.id === pm.tournamentId);
+      if (!t) return;
+      const fid = getFixtureIdFromPlayedMatch(pm, t);
+      if (fid) set.add(fid);
     });
     return set;
-  }, [tournaments, selectedDate, playedMatches]);
+  }, [tournaments, playedMatches]);
+
+  // Matches whose result was published on the selected date (for "results" view below calendar)
+  const playedMatchesOnSelectedDate = useMemo(() => {
+    if (!selectedDate || !Array.isArray(playedMatches)) return [];
+    const sel = new Date(selectedDate);
+    sel.setHours(0, 0, 0, 0);
+    const selTime = sel.getTime();
+    return playedMatches.filter((m) => {
+      const raw = m.createdAt;
+      const d = raw?.toDate ? raw.toDate() : (raw ? new Date(raw) : null);
+      if (!d || Number.isNaN(d.getTime())) return false;
+      const matchDay = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+      return matchDay.getTime() === selTime;
+    });
+  }, [selectedDate, playedMatches]);
+
+  const matchesByTournamentOnSelectedDate = useMemo(() => {
+    const map = {};
+    playedMatchesOnSelectedDate.forEach((m) => {
+      const tid = m.tournamentId;
+      if (!tid) return;
+      if (!map[tid]) map[tid] = [];
+      map[tid].push(m);
+    });
+    return map;
+  }, [playedMatchesOnSelectedDate]);
+
+  const hasResultsOnSelectedDate = playedMatchesOnSelectedDate.length > 0;
+
+  const today = useMemo(() => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }, []);
+  const isSelectedDateToday = selectedDate && today && (
+    selectedDate.getFullYear() === today.getFullYear() &&
+    selectedDate.getMonth() === today.getMonth() &&
+    selectedDate.getDate() === today.getDate()
+  );
 
   // Track if a detail view has been opened in this session so we only clear
   // persisted state when the user explicitly navigates back, not on initial load.
@@ -1716,7 +1867,11 @@ export default function Betting() {
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/5 hover:bg-white/15 border border-white/10 text-[11px] font-semibold text-gray-100"
                 >
                   <CalendarDays className="w-3.5 h-3.5 text-yellow-400" />
-                  <span>Calendar</span>
+                  <span>
+                    {isSelectedDateToday
+                      ? 'Calendar'
+                      : selectedDate.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric' })}
+                  </span>
                   <ChevronDown className={`w-3 h-3 text-gray-400 transition-transform ${showCalendar ? 'rotate-180' : ''}`} />
                 </button>
                 <button
@@ -1747,20 +1902,117 @@ export default function Betting() {
               )}
             </div>
 
-            {/* Tournament groups / leagues */}
+            {/* Today: show upcoming fixtures. Other dates: show results for that day or "no results" */}
             <div className="space-y-4">
-              {tournaments.length === 0 ? (
-                <div className="rounded-3xl border border-white/10 bg-[#050509]/90 p-8 text-center shadow-[0_0_32px_rgba(0,0,0,0.65)]">
-                  <p className="text-white font-semibold mb-2">No tournaments yet</p>
-                  <p className="text-gray-400 text-sm">
-                    Create a tournament in Match Day, then come back here to see upcoming fixtures.
-                  </p>
-                </div>
-              ) : (
-                tournaments.map((t) => {
-                  const expanded = expandedIds.has(t.id);
-                  const matches = generateLeagueFixtures(t, selectedDate);
+              {isSelectedDateToday ? (
+                tournaments.length === 0 ? (
+                  <div className="rounded-3xl border border-white/10 bg-[#050509]/90 p-8 text-center shadow-[0_0_32px_rgba(0,0,0,0.65)]">
+                    <p className="text-white font-semibold mb-2">No tournaments yet</p>
+                    <p className="text-gray-400 text-sm">
+                      Create a tournament in Match Day, then come back here to see upcoming fixtures.
+                    </p>
+                  </div>
+                ) : (
+                  tournaments.map((t) => {
+                    const expanded = expandedIds.has(t.id);
+                    const upcomingMatches = getUpcomingFixtures(t, playedMatches, selectedDate);
+                    const completedToday = (playedMatchesOnSelectedDate || []).filter((m) => m.tournamentId === t.id);
+                    const sortedCompletedToday = [...completedToday].sort((a, b) => (a.matchNumber ?? 0) - (b.matchNumber ?? 0));
+                    const hasCompletedToday = sortedCompletedToday.length > 0;
+                    const hasUpcoming = upcomingMatches.length > 0;
+                    const meta = getLeagueMeta(t);
+
+                    return (
+                      <motion.section
+                        key={t.id}
+                        initial={{ opacity: 0, y: 4 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="rounded-3xl overflow-hidden bg-[#050509]/95 border border-white/10 shadow-[0_0_30px_rgba(0,0,0,0.7)]"
+                      >
+                        <button
+                          onClick={() => toggleTournament(t.id)}
+                          className="w-full flex items-center justify-between px-4 sm:px-6 py-3 bg-white/5 hover:bg-white/10 text-white transition-colors"
+                        >
+                          <div className="flex items-center gap-3 text-left">
+                            <div className="w-8 h-8 rounded-full bg-yellow-500/10 border border-yellow-500/40 flex items-center justify-center overflow-hidden shadow-sm">
+                              {meta.logo ? (
+                                <img src={meta.logo} alt={meta.short} className="w-7 h-7 object-contain" />
+                              ) : (
+                                <Trophy className="w-4 h-4 text-yellow-400" />
+                              )}
+                            </div>
+                            <h2 className="text-xs sm:text-sm md:text-base font-black tracking-[0.18em] uppercase text-white">
+                              {meta.display}
+                            </h2>
+                          </div>
+                          <div className="flex items-center gap-2 text-gray-400 text-xs">
+                            <span>
+                              {hasCompletedToday && hasUpcoming
+                                ? `${sortedCompletedToday.length} result${sortedCompletedToday.length !== 1 ? 's' : ''}, ${upcomingMatches.length} upcoming`
+                                : hasCompletedToday
+                                  ? `${sortedCompletedToday.length} result${sortedCompletedToday.length !== 1 ? 's' : ''} today`
+                                  : hasUpcoming
+                                    ? `${upcomingMatches.length} fixtures`
+                                    : 'No upcoming'}
+                            </span>
+                            {expanded ? (
+                              <ChevronDown className="w-4 h-4" />
+                            ) : (
+                              <ChevronRight className="w-4 h-4" />
+                            )}
+                          </div>
+                        </button>
+                        {expanded && (hasCompletedToday || hasUpcoming) && (
+                          <div className="bg-black/40 divide-y divide-white/5">
+                            {sortedCompletedToday.map((playedMatch) => {
+                              const homeTeamObj = t.teams?.find((tm) => matchTeamToMatch(tm, playedMatch, 'home')) ?? null;
+                              const awayTeamObj = t.teams?.find((tm) => matchTeamToMatch(tm, playedMatch, 'away')) ?? null;
+                              const matchForRow = {
+                                id: getFixtureIdFromPlayedMatch(playedMatch, t) || playedMatch.id,
+                                home: teamLabel(homeTeamObj),
+                                away: teamLabel(awayTeamObj),
+                                homeTeamObj,
+                                awayTeamObj,
+                                kickoff: playedMatch.createdAt?.toDate?.() ?? playedMatch.createdAt ?? selectedDate,
+                                matchNumber: playedMatch.matchNumber,
+                              };
+                              return (
+                                <MatchRow
+                                  key={playedMatch.id}
+                                  match={matchForRow}
+                                  finishedMatch={playedMatch}
+                                  onOpen={() => handleOpenMatch(matchForRow, t)}
+                                />
+                              );
+                            })}
+                            {upcomingMatches.map((m) => (
+                              <MatchRow
+                                key={m.id}
+                                match={m}
+                                finishedMatch={findPlayedMatchForFixture(m, t, playedMatches)}
+                                onOpen={() => handleOpenMatch(m, t)}
+                              />
+                            ))}
+                          </div>
+                        )}
+                        {expanded && !hasCompletedToday && !hasUpcoming && (
+                          <div className="bg-black/40 px-4 py-6 text-center text-gray-500 text-sm">
+                            No results posted today and no upcoming fixtures. League may have ended or no matches scheduled yet.
+                          </div>
+                        )}
+                      </motion.section>
+                    );
+                  })
+                )
+              ) : hasResultsOnSelectedDate ? (
+                Object.keys(matchesByTournamentOnSelectedDate).map((tournamentId) => {
+                  const t = tournaments.find((x) => x.id === tournamentId);
+                  if (!t) return null;
+                  const leagueMatches = matchesByTournamentOnSelectedDate[tournamentId];
+                  if (!leagueMatches || leagueMatches.length === 0) return null;
                   const meta = getLeagueMeta(t);
+                  const fixtures = generateLeagueFixtures(t, selectedDate);
+                  const sortedMatches = [...leagueMatches].sort((a, b) => (a.matchNumber ?? 0) - (b.matchNumber ?? 0));
 
                   return (
                     <motion.section
@@ -1769,19 +2021,11 @@ export default function Betting() {
                       animate={{ opacity: 1, y: 0 }}
                       className="rounded-3xl overflow-hidden bg-[#050509]/95 border border-white/10 shadow-[0_0_30px_rgba(0,0,0,0.7)]"
                     >
-                      {/* League header row, inspired by FotMob section headers */}
-                      <button
-                        onClick={() => toggleTournament(t.id)}
-                        className="w-full flex items-center justify-between px-4 sm:px-6 py-3 bg-white/5 hover:bg-white/10 text-white transition-colors"
-                      >
+                      <div className="w-full flex items-center justify-between px-4 sm:px-6 py-3 bg-white/5 text-white">
                         <div className="flex items-center gap-3 text-left">
                           <div className="w-8 h-8 rounded-full bg-yellow-500/10 border border-yellow-500/40 flex items-center justify-center overflow-hidden shadow-sm">
                             {meta.logo ? (
-                              <img
-                                src={meta.logo}
-                                alt={meta.short}
-                                className="w-7 h-7 object-contain"
-                              />
+                              <img src={meta.logo} alt={meta.short} className="w-7 h-7 object-contain" />
                             ) : (
                               <Trophy className="w-4 h-4 text-yellow-400" />
                             )}
@@ -1790,34 +2034,55 @@ export default function Betting() {
                             {meta.display}
                           </h2>
                         </div>
-                        <div className="flex items-center gap-2 text-gray-400 text-xs">
-                          <span>{matches.length} fixtures</span>
-                          {expanded ? (
-                            <ChevronDown className="w-4 h-4" />
-                          ) : (
-                            <ChevronRight className="w-4 h-4" />
-                          )}
-                        </div>
-                      </button>
-
-                      {/* Match schedule list */}
-                      {expanded && matches.length > 0 && (
-                        <div className="bg-black/40 divide-y divide-white/5">
-                          {matches.map((m) => (
+                        <span className="text-gray-400 text-xs">
+                          {leagueMatches.length} {leagueMatches.length === 1 ? 'match' : 'matches'}
+                        </span>
+                      </div>
+                      <div className="bg-black/40 divide-y divide-white/5">
+                        {sortedMatches.map((playedMatch) => {
+                          const homeTeamObj = t.teams?.find((tm) => matchTeamToMatch(tm, playedMatch, 'home')) ?? null;
+                          const awayTeamObj = t.teams?.find((tm) => matchTeamToMatch(tm, playedMatch, 'away')) ?? null;
+                          const fixture = fixtures.find(
+                            (f) =>
+                              matchTeamToMatch(f.homeTeamObj, playedMatch, 'home') &&
+                              matchTeamToMatch(f.awayTeamObj, playedMatch, 'away')
+                          );
+                          const matchForRow = fixture ?? {
+                            id: playedMatch.id,
+                            home: teamLabel(homeTeamObj),
+                            away: teamLabel(awayTeamObj),
+                            homeTeamObj,
+                            awayTeamObj,
+                            kickoff: playedMatch.createdAt?.toDate?.() ?? playedMatch.createdAt ?? selectedDate,
+                            matchNumber: playedMatch.matchNumber,
+                          };
+                          return (
                             <MatchRow
-                              key={m.id}
-                              match={m}
-                              finishedMatch={findPlayedMatchForFixture(m, t, playedMatches)}
-                              onOpen={() => {
-                                handleOpenMatch(m, t);
-                              }}
+                              key={playedMatch.id}
+                              match={matchForRow}
+                              finishedMatch={playedMatch}
+                              onOpen={() => handleOpenMatch(matchForRow, t)}
                             />
-                          ))}
-                        </div>
-                      )}
+                          );
+                        })}
+                      </div>
                     </motion.section>
                   );
                 })
+              ) : tournaments.length === 0 ? (
+                <div className="rounded-3xl border border-white/10 bg-[#050509]/90 p-8 text-center shadow-[0_0_32px_rgba(0,0,0,0.65)]">
+                  <p className="text-white font-semibold mb-2">No tournaments yet</p>
+                  <p className="text-gray-400 text-sm">
+                    Create a tournament in Match Day, then come back here to see results.
+                  </p>
+                </div>
+              ) : (
+                <div className="rounded-3xl border border-white/10 bg-[#050509]/90 p-8 text-center shadow-[0_0_32px_rgba(0,0,0,0.65)]">
+                  <p className="text-white font-semibold mb-2">No results for this day</p>
+                  <p className="text-gray-400 text-sm">
+                    Select a date with a • on the calendar to see matches and final scores from that day.
+                  </p>
+                </div>
               )}
             </div>
           </>
@@ -1890,7 +2155,10 @@ function MatchRow({ match, finishedMatch, onOpen }) {
       type="button"
       onClick={onOpen}
     >
-      <span className="flex-1 flex items-center justify-center gap-4 text-center">
+      {typeof match.matchNumber === 'number' && (
+        <span className="text-[10px] font-bold uppercase tracking-wider text-yellow-500/90 mr-2 shrink-0">#{match.matchNumber}</span>
+      )}
+      <span className="flex-1 flex items-center justify-center gap-4 text-center min-w-0">
         <span className="flex flex-col items-end max-w-[40%]">
           <span className="font-medium">
             {/* Top: always team/nickname label if present */}
