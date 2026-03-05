@@ -369,8 +369,8 @@ export default function MatchDay({ onGoalScored }) {
     >
       {/* Header - Stacks on mobile, inline on desktop */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6 mb-10 border-b border-yellow-500/20 pb-6">
-        <div>
-           <h2 className="text-4xl md:text-5xl font-black italic uppercase tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-yellow-500 via-yellow-200 to-yellow-600 drop-shadow-[0_0_15px_rgba(234,179,8,0.3)]">Match Day</h2>
+        <div className="min-w-0 flex-1 pr-2">
+           <h2 className="text-4xl md:text-5xl font-black italic uppercase tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-yellow-500 via-yellow-200 to-yellow-600 drop-shadow-[0_0_15px_rgba(234,179,8,0.3)] pr-2">Match Day</h2>
            <p className="text-xs text-gray-400 font-bold uppercase tracking-widest mt-2">Manage Tournaments & Record Scores</p>
         </div>
         <motion.button 
@@ -462,9 +462,9 @@ export default function MatchDay({ onGoalScored }) {
       <div className="mt-16 bg-[#0a0a0c]/80 rounded-[30px] sm:rounded-[40px] p-6 sm:p-8 border border-yellow-500/20 shadow-[0_0_30px_rgba(0,0,0,0.5)] relative overflow-hidden">
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full h-1 bg-gradient-to-r from-transparent via-yellow-500 to-transparent opacity-30" />
         
-        <div className="flex items-center gap-3 mb-8 sm:mb-10">
-           <History className="text-yellow-500 w-6 h-6 sm:w-7 sm:h-7" />
-           <h3 className="text-3xl md:text-4xl font-black italic uppercase tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-yellow-500 via-yellow-200 to-yellow-600 drop-shadow-[0_0_15px_rgba(234,179,8,0.3)]">
+        <div className="flex items-center gap-3 mb-8 sm:mb-10 min-w-0">
+           <History className="text-yellow-500 w-6 h-6 sm:w-7 sm:h-7 shrink-0" />
+           <h3 className="text-3xl md:text-4xl font-black italic uppercase tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-yellow-500 via-yellow-200 to-yellow-600 drop-shadow-[0_0_15px_rgba(234,179,8,0.3)] pr-2">
              Match History
            </h3>
         </div>

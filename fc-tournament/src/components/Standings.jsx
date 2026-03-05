@@ -184,9 +184,9 @@ export default function Standings() {
               <img src={leagueIcons[leagueType]} className="absolute -right-10 -bottom-10 w-48 h-48 object-contain opacity-[0.02] pointer-events-none" alt="" />
               
               <div className="flex justify-between items-center mb-4 sm:mb-6 relative z-10">
-                <div className="flex flex-col gap-1 sm:gap-1.5">
-                  <div className="flex items-center gap-3">
-                    <h2 className="text-2xl sm:text-3xl font-black italic tracking-tighter uppercase leading-none text-transparent bg-clip-text bg-gradient-to-r from-neonBlue to-[#00ff88]">
+                <div className="flex flex-col gap-1 sm:gap-1.5 min-w-0 flex-1 pr-2">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <h2 className="text-2xl sm:text-3xl font-black italic tracking-tighter uppercase leading-none text-transparent bg-clip-text bg-gradient-to-r from-neonBlue to-[#00ff88] pr-2">
                       <span className="text-neonBlue lowercase italic">e</span>{leagueType.replace('e', '')}
                     </h2>
                     <span className="text-[9px] font-black uppercase tracking-widest bg-[#00ff88]/10 text-[#00ff88] px-2 py-1 rounded-md border border-[#00ff88]/20">{leagueFormat}</span>
@@ -263,9 +263,9 @@ export default function Standings() {
 
         {/* FC ULTIMATE TEAM STYLE CAREER STATS */}
         <div className="relative overflow-visible rounded-[20px] bg-white/[0.02] border border-white/10 backdrop-blur-sm p-4 sm:p-6 w-full min-w-0">
-          <div className="flex items-center gap-3 mb-6 sm:mb-8">
+          <div className="flex items-center gap-3 mb-6 sm:mb-8 min-w-0">
              <Activity className="w-6 h-6 text-[#00ff88] shrink-0 drop-shadow-[0_0_10px_rgba(0,255,136,0.5)]" /> 
-             <h3 className="text-2xl sm:text-3xl font-black italic tracking-tighter uppercase leading-none text-transparent bg-clip-text bg-gradient-to-r from-neonBlue to-[#00ff88] drop-shadow-[0_0_20px_rgba(0,255,136,0.3)]">Squad Career Stats</h3>
+             <h3 className="text-2xl sm:text-3xl font-black italic tracking-tighter uppercase leading-none text-transparent bg-clip-text bg-gradient-to-r from-neonBlue to-[#00ff88] drop-shadow-[0_0_20px_rgba(0,255,136,0.3)] pr-2">Squad Career Stats</h3>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6 sm:gap-8 w-full min-w-0">
             {players.map((player, idx) => {

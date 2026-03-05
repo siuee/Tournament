@@ -311,8 +311,8 @@ export default function LockerRoom() {
     <div className="min-h-screen relative text-white pb-32 overflow-hidden">
       {/* Header */}
       <div className="px-4 md:px-8 pt-6 pb-4 border-b border-yellow-500/20 mb-4 md:mb-8 bg-black/60 backdrop-blur-xl sticky top-0 z-30 flex justify-between items-center shadow-[0_10px_30px_rgba(0,0,0,0.5)]">
-         <div>
-            <h2 className="text-3xl md:text-5xl font-black italic uppercase tracking-tighter text-transparent bg-clip-text bg-gradient-to-b from-yellow-200 via-yellow-500 to-yellow-700 drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)] flex items-center gap-3">
+         <div className="min-w-0 flex-1 pr-2">
+            <h2 className="text-3xl md:text-5xl font-black italic uppercase tracking-tighter text-transparent bg-clip-text bg-gradient-to-b from-yellow-200 via-yellow-500 to-yellow-700 drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)] flex items-center gap-3 pr-2">
               My Club
             </h2>
             <div className="flex items-center gap-3 mt-1">

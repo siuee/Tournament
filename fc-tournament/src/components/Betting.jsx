@@ -1794,12 +1794,12 @@ export default function Betting() {
     <div className="relative flex flex-col gap-4 w-full pb-28 md:pb-20">
       {/* Header */}
       <div className="flex items-center justify-between gap-4 mb-2">
-        <div className="flex items-center gap-3">
-          <div className="p-2 rounded-2xl bg-yellow-500/10 border border-yellow-500/40 shadow-[0_0_24px_rgba(250,204,21,0.35)]">
+        <div className="flex items-center gap-3 min-w-0 flex-1 pr-2">
+          <div className="p-2 rounded-2xl bg-yellow-500/10 border border-yellow-500/40 shadow-[0_0_24px_rgba(250,204,21,0.35)] shrink-0">
             <TicketPercent className="w-6 h-6 text-yellow-400" />
           </div>
-          <div>
-            <h1 className="text-2xl md:text-3xl font-black italic uppercase tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 via-yellow-200 to-yellow-500">
+          <div className="min-w-0">
+            <h1 className="text-2xl md:text-3xl font-black italic uppercase tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 via-yellow-200 to-yellow-500 pr-2">
               Banana Betting Zone
             </h1>
             <p className="text-[11px] text-gray-400 font-medium">
