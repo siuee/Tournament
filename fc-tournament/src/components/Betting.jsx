@@ -24,6 +24,11 @@ import { formatMatchHistoryTeam, formatMatchDateTime, matchTeamToMatch } from '.
 import { formatCountShort } from '../lib/utils';
 import { ProbabilityPanel, FormPanel } from './BettingExtras';
 import { H2HPanel } from './BettingH2H';
+import {
+  ExpandableChat,
+  ExpandableChatBody,
+  useExpandableChat,
+} from './ui/expandable-chat';
 // Landing view is pure schedule; stats panels are used on the match detail view.
 
 // Simple fake data inspired by FC esports betting slates.
@@ -642,6 +647,12 @@ function getSafeTime(dateObj) {
 const BETTING_FIXTURES = 'betting_fixtures';
 const BETTING_VIEWED_KEY = 'banana-betting-viewed-';
 
+// Persist detail view + inner tab so refresh keeps user on same match + tab
+const BETTING_DETAIL_STATE_KEY = 'banana-betting-detail-state-v1';
+
+// Persist selected date on betting landing page
+const BETTING_SELECTED_DATE_KEY = 'banana-betting-selected-date-v1';
+
 function getFixtureId(match) {
   if (match?.id) return String(match.id);
   const t = match?.kickoff ? new Date(match.kickoff).getTime() : 0;
@@ -825,6 +836,21 @@ export default function Betting() {
   const [betslip, setBetslip] = useState([]);
   const [stake, setStake] = useState('10');
   const [selectedDate, setSelectedDate] = useState(() => {
+    // Try to restore the last selected date so refresh keeps you on the same slate
+    try {
+      if (typeof window !== 'undefined' && typeof sessionStorage !== 'undefined') {
+        const stored = sessionStorage.getItem(BETTING_SELECTED_DATE_KEY);
+        if (stored) {
+          const parsed = new Date(stored);
+          if (!Number.isNaN(parsed.getTime())) {
+            parsed.setHours(0, 0, 0, 0);
+            return parsed;
+          }
+        }
+      }
+    } catch (e) {
+      // ignore and fall back to today
+    }
     const d = new Date();
     d.setHours(0, 0, 0, 0);
     return d;
@@ -842,6 +868,48 @@ export default function Betting() {
   const [teamTotalsProbsState, setTeamTotalsProbsState] = useState({ home: null, away: null });
   const [cleanSheetProbsState, setCleanSheetProbsState] = useState({ home: null, away: null });
   const [refreshFixtureStatsTrigger, setRefreshFixtureStatsTrigger] = useState(0);
+
+  // Track if a detail view has been opened in this session so we only clear
+  // persisted state when the user explicitly navigates back, not on initial load.
+  const hadDetailRef = useRef(false);
+
+  // Persist which match + inner tab the user is viewing so refresh keeps them there
+  useEffect(() => {
+    try {
+      if (typeof window === 'undefined' || typeof sessionStorage === 'undefined') return;
+      if (!detailMatch || !detailTournament) {
+        // On first mount after a hard refresh, we don't want to immediately
+        // wipe out the stored detail state before we get a chance to restore it.
+        // Only clear if we've actually had a detail view open during this session.
+        if (hadDetailRef.current) {
+          sessionStorage.removeItem(BETTING_DETAIL_STATE_KEY);
+        }
+        return;
+      }
+      hadDetailRef.current = true;
+      const payload = {
+        matchId: detailMatch.id,
+        tournamentId: detailTournament.id,
+        tab: detailTab,
+      };
+      sessionStorage.setItem(BETTING_DETAIL_STATE_KEY, JSON.stringify(payload));
+    } catch (e) {
+      // ignore storage failures
+    }
+  }, [detailMatch, detailTournament, detailTab]);
+
+  // Persist selected date whenever it changes so a full page refresh keeps the same day
+  useEffect(() => {
+    try {
+      if (typeof window === 'undefined' || typeof sessionStorage === 'undefined') return;
+      if (!(selectedDate instanceof Date)) return;
+      const toStore = new Date(selectedDate);
+      toStore.setHours(0, 0, 0, 0);
+      sessionStorage.setItem(BETTING_SELECTED_DATE_KEY, toStore.toISOString());
+    } catch (e) {
+      // ignore storage failures
+    }
+  }, [selectedDate]);
 
   const handleConfirmSlip = async (slip, localStakes) => {
     if (!slip?.length) return;
@@ -919,6 +987,42 @@ export default function Betting() {
     return () => { mounted = false; };
   }, []);
 
+  // On first load, try to restore the last opened match + tab (detail view) from sessionStorage
+  useEffect(() => {
+    try {
+      if (typeof window === 'undefined' || typeof sessionStorage === 'undefined') return;
+      if (!tournaments.length) return;
+      if (detailMatch) return; // don't override if user already picked something this session
+
+      const raw = sessionStorage.getItem(BETTING_DETAIL_STATE_KEY);
+      if (!raw) return;
+      let parsed;
+      try {
+        parsed = JSON.parse(raw);
+      } catch {
+        return;
+      }
+      if (!parsed || !parsed.matchId || !parsed.tournamentId) return;
+
+      const tournament = tournaments.find(t => t.id === parsed.tournamentId);
+      if (!tournament) return;
+
+      const matches = generateLeagueFixtures(tournament, selectedDate);
+      const match = matches.find(m => String(m.id) === String(parsed.matchId));
+      if (!match) return;
+
+      setDetailTournament(tournament);
+      setDetailMatch(match);
+      if (parsed.tab && ['preview', 'probability', 'form', 'h2h', 'bet'].includes(parsed.tab)) {
+        setDetailTab(parsed.tab);
+      } else {
+        setDetailTab('preview');
+      }
+    } catch (e) {
+      // ignore restoration failures
+    }
+  }, [tournaments, selectedDate, detailMatch]);
+
   const toggleTournament = (id) => {
     setExpandedIds(prev => {
       const next = new Set(prev);
@@ -984,6 +1088,12 @@ export default function Betting() {
       ];
     });
   };
+
+  // Broadcast bet slip count to App so mobile FAB can show the badge
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.dispatchEvent(new CustomEvent('bet-slip-count', { detail: betslip.length }));
+  }, [betslip.length]);
 
   // Load head-to-head matches when opening H2H tab on the detail page
   useEffect(() => {
@@ -2957,62 +3067,40 @@ function BetMarketsPanel({
         ))}
       </div>
 
-      {/* Bet slip: only appears when you have picks — materializes out of the air */}
-      <AnimatePresence mode="wait">
-        {betslip.length > 0 && (
-          <motion.div
-            key="bet-slip"
-            initial={{ opacity: 0, scale: 0.6, y: 16, filter: 'blur(8px)' }}
-            animate={{ opacity: 1, scale: 1, y: 0, filter: 'blur(0px)' }}
-            exit={{ opacity: 0, scale: 0.88, filter: 'blur(4px)' }}
-            transition={{ type: 'spring', damping: 22, stiffness: 280 }}
-            className="mt-4 w-full max-w-sm lg:mt-0 lg:fixed lg:top-4 lg:right-8 lg:w-80 lg:max-w-xs lg:max-h-[calc(100vh-2rem)] z-[100] scroll-mt-4"
-            id="bet-slip-section"
-          >
-            <motion.div
-              initial={{ boxShadow: '0 0 0 0 rgba(34, 211, 238, 0)' }}
-              animate={{ boxShadow: '0 0 50px 2px rgba(34, 211, 238, 0.35), 0 0 90px 4px rgba(244, 63, 94, 0.15)' }}
-              transition={{ delay: 0.15, duration: 0.4 }}
-              className="rounded-2xl"
-            >
-              <BetSlipCard
-                betslip={betslip}
-                stake={stake}
-                totals={totals}
-                onToggleSelection={onToggleSelection}
-                onStakeChange={onStakeChange}
-                onClearAll={onClearAll}
-                onConfirmSlip={onConfirmSlip}
-              />
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Mobile: floating pill to jump to bet slip when you have picks */}
-      <AnimatePresence>
-        {betslip.length > 0 && (
-          <motion.button
-            key="slip-pill"
-            initial={{ opacity: 0, scale: 0.5 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.5 }}
-            onClick={() => document.getElementById('bet-slip-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-            className="lg:hidden fixed bottom-36 right-4 z-[105] rounded-full bg-gradient-to-br from-cyan-500 to-cyan-700 shadow-[0_4px_20px_rgba(34,211,238,0.5)] border border-cyan-300/50 flex items-center justify-center gap-1.5 px-3 py-2.5 text-white font-black uppercase text-[10px] tracking-wider"
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            aria-label="Go to bet slip"
-          >
-            <TicketPercent className="w-4 h-4 shrink-0" />
-            <span>Slip</span>
-          </motion.button>
-        )}
-      </AnimatePresence>
+      {/* Bet slip: expandable chat bubble bottom-right. Bubble is always visible on Betting page. */}
+      <ExpandableChat
+        size="sm"
+        position="bottom-right"
+        icon={
+          <div className="relative flex items-center justify-center">
+            <TicketPercent className="h-5 w-5" />
+            {betslip.length > 0 && (
+              <span className="absolute -top-1 -right-1 inline-flex h-4 min-w-4 px-1 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white">
+                {betslip.length}
+              </span>
+            )}
+          </div>
+        }
+        autoOpenKey={betslip.length || null}
+      >
+        <ExpandableChatBody className="p-0 max-h-[70vh]">
+          <BetSlipCard
+            betslip={betslip}
+            stake={stake}
+            totals={totals}
+            onToggleSelection={onToggleSelection}
+            onStakeChange={onStakeChange}
+            onClearAll={onClearAll}
+            onConfirmSlip={onConfirmSlip}
+          />
+        </ExpandableChatBody>
+      </ExpandableChat>
     </div>
   );
 }
 
 function BetSlipCard({ betslip, stake, totals, onToggleSelection, onStakeChange, onClearAll, onConfirmSlip }) {
+  const chat = useExpandableChat();
   const [localStakes, setLocalStakes] = useState({});
   const [winDraft, setWinDraft] = useState({}); // raw Win input while typing to avoid overwriting mid-edit
   const [confirming, setConfirming] = useState(false);
@@ -3023,6 +3111,18 @@ function BetSlipCard({ betslip, stake, totals, onToggleSelection, onStakeChange,
     const t = setTimeout(() => setPlaced(false), 1800);
     return () => clearTimeout(t);
   }, [placed]);
+
+  // Allow external FAB (in App) to toggle this slip via a custom event (mobile Bovada-style behavior)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handler = () => {
+      if (chat && typeof chat.toggle === 'function') {
+        chat.toggle();
+      }
+    };
+    window.addEventListener('bet-slip-toggle', handler);
+    return () => window.removeEventListener('bet-slip-toggle', handler);
+  }, [chat]);
 
   const handleConfirm = async () => {
     if (!onConfirmSlip || confirming) return;
@@ -3044,10 +3144,10 @@ function BetSlipCard({ betslip, stake, totals, onToggleSelection, onStakeChange,
   };
 
   return (
-    <div className="rounded-2xl border border-cyan-400/60 bg-gradient-to-br from-[#020617] via-[#020617] to-[#0f172a] shadow-[0_0_45px_rgba(34,211,238,0.45)] p-3 relative overflow-hidden flex flex-col min-h-0 max-h-[min(calc(100vh-5rem),32rem)] text-xs font-sans">
+    <div className="rounded-2xl bg-gradient-to-br from-[#020617] via-[#020617] to-[#0f172a] shadow-[0_0_45px_rgba(34,211,238,0.45)] p-3 relative overflow-hidden flex flex-col w-full h-[65vh] sm:h-[430px] md:h-[460px] text-xs font-sans">
       <div className="pointer-events-none absolute inset-0 opacity-40 bg-[radial-gradient(circle_at_top,_rgba(56,189,248,0.45),transparent_55%),radial-gradient(circle_at_bottom,_rgba(244,63,94,0.45),transparent_55%)]" />
-      <div className="relative flex flex-col min-h-0 flex-1 flex">
-      <div className="flex items-center justify-between mb-2 flex-shrink-0">
+      <div className="relative flex flex-col flex-1 min-h-0">
+        <div className="flex items-center justify-between mb-2 flex-shrink-0">
           <div className="flex items-center gap-1.5">
             <div className="relative">
               <div className="absolute inset-0 blur-md bg-cyan-400/60 rounded-full" />
@@ -3062,8 +3162,9 @@ function BetSlipCard({ betslip, stake, totals, onToggleSelection, onStakeChange,
               </p>
             </div>
           </div>
+          {/* Picks chip: show in header on desktop only (mobile already shows count on bubbles/FAB) */}
           {betslip.length > 0 && (
-            <span className="text-[10px] font-bold text-fuchsia-300 uppercase tracking-wider bg-fuchsia-500/10 border border-fuchsia-400/40 rounded-full px-1.5 py-0.5">
+            <span className="hidden sm:inline-flex text-[10px] font-bold text-fuchsia-300 uppercase tracking-wider bg-fuchsia-500/10 border border-fuchsia-400/40 rounded-full px-1.5 py-0.5">
               {betslip.length} picks
             </span>
           )}
@@ -3122,10 +3223,11 @@ function BetSlipCard({ betslip, stake, totals, onToggleSelection, onStakeChange,
           )}
         </AnimatePresence>
 
+        {/* Top dynamic section + bottom fixed section */}
         {betslip.length === 0 ? (
-          <p className="text-xs text-cyan-100/80">
+          <div className="flex-1 flex items-center justify-center text-xs text-cyan-100/80">
             Tap any odds on the left to add a selection.
-          </p>
+          </div>
         ) : (
           (() => {
             let totalStake = 0;
@@ -3211,10 +3313,12 @@ function BetSlipCard({ betslip, stake, totals, onToggleSelection, onStakeChange,
 
             return (
               <>
+                {/* TOP: scrollable odds list */}
                 <div className="space-y-2 flex-1 min-h-0 overflow-y-auto pr-1 custom-scrollbar-thin mb-2">
                   {renderedSelections}
                 </div>
 
+                {/* BOTTOM: fixed totals + actions */}
                 <div className="space-y-1.5 border-t border-cyan-500/40 pt-2 flex-shrink-0">
                   <div className="flex items-center justify-between text-xs text-slate-200">
                     <span>Total amount placed</span>
@@ -3255,9 +3359,6 @@ function BetSlipCard({ betslip, stake, totals, onToggleSelection, onStakeChange,
                     {confirming ? <Loader2 className="w-4 h-4 animate-spin" /> : <Percent className="w-3 h-3" />}
                     {confirming ? 'Placing…' : 'Confirm Slip'}
                   </motion.button>
-                  <p className="text-[10px] text-cyan-200/80 leading-snug">
-                    For entertainment only. No real bets.
-                  </p>
                 </div>
               </>
             );

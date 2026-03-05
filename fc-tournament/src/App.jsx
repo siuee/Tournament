@@ -97,6 +97,7 @@ function App() {
     return 'standings';
   });
   const [hideMobileNav, setHideMobileNav] = useState(false);
+  const [betSlipCount, setBetSlipCount] = useState(0);
 
   // Persist active tab so refresh keeps user on the same page
   useEffect(() => {
@@ -177,6 +178,17 @@ function App() {
     };
     window.addEventListener('insider-comment-open', handler);
     return () => window.removeEventListener('insider-comment-open', handler);
+  }, []);
+
+  // Listen for bet slip count updates from Betting page so we can show badge on mobile FAB
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handler = (e) => {
+      const n = Number(e?.detail) || 0;
+      setBetSlipCount(n);
+    };
+    window.addEventListener('bet-slip-count', handler);
+    return () => window.removeEventListener('bet-slip-count', handler);
   }, []);
 
   return (
@@ -341,6 +353,35 @@ function App() {
             </motion.button>
           )}
         </AnimatePresence>
+      </div>
+
+      {/* Mobile Bet Slip FAB – mirrored on the right side, only on betting tab */}
+      <div className="fixed bottom-32 right-6 z-[9999] flex flex-col items-center gap-4 md:hidden">
+        {activeTab === 'betting' && (
+          <motion.button
+            key="bet-slip-fab"
+            initial={{ scale: 0, rotate: 180, opacity: 0 }}
+            animate={{ scale: 1, rotate: 0, opacity: 1 }}
+            exit={{ scale: 0, rotate: -180, opacity: 0 }}
+            whileHover={{ scale: 1.1 }}
+            whileTap={{ scale: 0.9 }}
+            onClick={() => {
+              if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('bet-slip-toggle'));
+              }
+            }}
+            className="w-14 h-14 rounded-full bg-[#050509] border-4 border-yellow-500 shadow-[0_10px_30px_rgba(234,179,8,0.5)] flex items-center justify-center text-yellow-300"
+          >
+            <div className="relative flex items-center justify-center">
+              <TicketPercent className="w-7 h-7" />
+              {betSlipCount > 0 && (
+                <span className="absolute -top-1 -right-1 inline-flex h-4 min-w-4 px-1 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white">
+                  {betSlipCount}
+                </span>
+              )}
+            </div>
+          </motion.button>
+        )}
       </div>
 
       <style dangerouslySetInnerHTML={{ __html: dynamicStyles + `
