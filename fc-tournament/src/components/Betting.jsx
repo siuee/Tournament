@@ -4170,12 +4170,8 @@ function CalendarGrid({ selectedDate, tournaments, playedMatches = [], onSelectD
     cells.push(new Date(viewYear, viewMonth, day));
   }
 
-  const hasFixturesOn = (date) => {
-    if (!tournaments || tournaments.length === 0) return false;
-    return tournaments.some((t) => generateLeagueFixtures(t, date).length > 0);
-  };
-
-  // Set of timestamps (midnight) for dates that have a played match (from MatchDay)
+  // Dot (•) is shown only when at least one fixture's final result was published that day
+  // (i.e. admin entered match score in MatchDay → doc saved to `matches` with createdAt that day).
   const playedMatchDates = useMemo(() => {
     const set = new Set();
     if (!Array.isArray(playedMatches)) return set;
@@ -4190,7 +4186,7 @@ function CalendarGrid({ selectedDate, tournaments, playedMatches = [], onSelectD
     return set;
   }, [playedMatches]);
 
-  const hasPlayedMatchOn = (date) => {
+  const hasResultPublishedOn = (date) => {
     const midnight = new Date(date.getFullYear(), date.getMonth(), date.getDate());
     return playedMatchDates.has(midnight.getTime());
   };
@@ -4282,35 +4278,32 @@ function CalendarGrid({ selectedDate, tournaments, playedMatches = [], onSelectD
             return <span key={`empty-${idx}`} />;
           }
           const selected = isSameDay(date, selectedDate);
-          const hasFixtures = hasFixturesOn(date);
-          const hasPlayed = hasPlayedMatchOn(date);
+          const hasResultPublished = hasResultPublishedOn(date);
 
           return (
             <button
               key={date.toISOString()}
               type="button"
-              onClick={() => onSelectDate(date)}
-              className={`relative flex flex-col items-center justify-center h-8 w-8 rounded-full text-[11px] ${
-                selected
-                  ? 'bg-yellow-500 text-black font-semibold'
-                  : 'bg-white/5 text-gray-200 hover:bg-white/10'
-              }`}
+              disabled={!hasResultPublished}
+              onClick={() => hasResultPublished && onSelectDate(date)}
+              title={hasResultPublished ? 'Fixture result published this day' : 'No result published this day'}
+              className={`relative flex flex-col items-center justify-center h-9 w-9 rounded-full text-[11px] ${
+                !hasResultPublished
+                  ? 'cursor-not-allowed opacity-50 text-gray-500 hover:bg-white/5'
+                  : selected
+                    ? 'bg-yellow-500 text-black font-semibold'
+                    : 'bg-white/5 text-gray-200 hover:bg-white/10'
+              } ${hasResultPublished ? 'ring-2 ring-yellow-400/80 ring-offset-2 ring-offset-black/60' : ''}`}
             >
               <span>{date.getDate()}</span>
-              {hasPlayed && (
+              {hasResultPublished && (
                 <span
-                  className={`absolute bottom-0.5 text-[8px] leading-none ${
-                    selected ? 'text-black/80' : 'text-yellow-400'
+                  className={`absolute bottom-0 text-lg leading-none font-black ${
+                    selected ? 'text-black' : 'text-yellow-400'
                   }`}
-                  title="Match played on this day"
                 >
                   •
                 </span>
-              )}
-              {!hasPlayed && hasFixtures && (
-                <span className={`absolute -bottom-0.5 w-1.5 h-1.5 rounded-full ${
-                  selected ? 'bg-black/70' : 'bg-yellow-400'
-                }`} />
               )}
             </button>
           );
