@@ -84,9 +84,27 @@ const RealisticGlassShatter = () => {
   );
 };
 
+const TAB_STORAGE_KEY = 'banana-fc-active-tab';
+const VALID_TABS = ['standings', 'match', 'insider', 'betting', 'locker'];
+
 function App() {
-  const [activeTab, setActiveTab] = useState('standings');
+  const [activeTab, setActiveTab] = useState(() => {
+    if (typeof window === 'undefined') return 'standings';
+    try {
+      const saved = sessionStorage.getItem(TAB_STORAGE_KEY);
+      if (saved && VALID_TABS.includes(saved)) return saved;
+    } catch {}
+    return 'standings';
+  });
   const [hideMobileNav, setHideMobileNav] = useState(false);
+
+  // Persist active tab so refresh keeps user on the same page
+  useEffect(() => {
+    if (typeof window === 'undefined' || !VALID_TABS.includes(activeTab)) return;
+    try {
+      sessionStorage.setItem(TAB_STORAGE_KEY, activeTab);
+    } catch {}
+  }, [activeTab]);
 
   // --- EASTER EGG STATES ---
   const [isSmashMode, setIsSmashMode] = useState(false);
