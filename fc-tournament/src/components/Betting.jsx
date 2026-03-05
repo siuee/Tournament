@@ -19,7 +19,7 @@ import {
   Loader2,
 } from 'lucide-react';
 import { db } from '../firebase';
-import { collection, getDocs, getDoc, doc, setDoc, updateDoc, addDoc, increment, query, orderBy } from 'firebase/firestore';
+import { collection, getDocs, getDoc, doc, setDoc, updateDoc, addDoc, increment, query, orderBy, limit } from 'firebase/firestore';
 import { formatMatchHistoryTeam, formatMatchDateTime, matchTeamToMatch } from '../lib/utils';
 import { formatCountShort } from '../lib/utils';
 import { ProbabilityPanel, FormPanel } from './BettingExtras';
@@ -71,11 +71,13 @@ function generateLeagueFixtures(tournament, selectedDate) {
       const home = teams[i];
       const away = teams[j];
       const kickoff = new Date(base + idx * 1000 * 60 * 45); // every 45 mins
+      const matchNumber = idx + 1; // league-relative match number (1,2,3...) within this tournament
       const id = `${makeTeamId(home, i)}-vs-${makeTeamId(away, j)}-${idx}`;
       const homeShort = teamLabel(home);
       const awayShort = teamLabel(away);
       fixtures.push({
         id,
+        matchNumber,
         kickoff,
         label: 'League Fixture',
         home: homeShort,
@@ -659,6 +661,226 @@ function getFixtureId(match) {
   return `${slug(match?.home || 'home')}-vs-${slug(match?.away || 'away')}-${t}`;
 }
 
+/** Find a played match from Firestore (MatchDay results) that matches this betting fixture (same tournament + same home/away teams). */
+function findPlayedMatchForFixture(fixture, tournament, playedMatches) {
+  if (!fixture?.homeTeamObj || !fixture?.awayTeamObj || !tournament?.id || !Array.isArray(playedMatches)) return null;
+  return playedMatches.find(
+    (m) =>
+      m.tournamentId === tournament.id &&
+      matchTeamToMatch(fixture.homeTeamObj, m, 'home') &&
+      matchTeamToMatch(fixture.awayTeamObj, m, 'away')
+  ) || null;
+}
+
+/** Normalize string for comparison (trim, lower). */
+function norm(s) {
+  return String(s ?? '').trim().toLowerCase();
+}
+
+/** Evaluate a single selection against full-time result. Returns 'won' | 'lost' | 'push'. */
+function evaluateSelection(market, selection, homeScore, awayScore, homeName, awayName) {
+  const h = Number(homeScore);
+  const a = Number(awayScore);
+  const total = h + a;
+  const homeWins = h > a;
+  const awayWins = a > h;
+  const draw = h === a;
+  const sel = norm(selection);
+  const home = norm(homeName);
+  const away = norm(awayName);
+
+  const marketLower = norm(market);
+
+  // Match Winner (3-Way / 1X2)
+  if (marketLower.includes('match winner') || marketLower.includes('1x2')) {
+    if (homeWins && (sel === home || selection === homeName)) return 'won';
+    if (awayWins && (sel === away || selection === awayName)) return 'won';
+    if (draw && (sel === 'draw' || selection === 'Draw')) return 'won';
+    return 'lost';
+  }
+
+  // Draw No Bet
+  if (marketLower.includes('draw no bet')) {
+    if (draw) return 'push';
+    if (homeWins && (sel === home || selection === homeName)) return 'won';
+    if (awayWins && (sel === away || selection === awayName)) return 'won';
+    return 'lost';
+  }
+
+  // Double Chance
+  if (marketLower.includes('double chance')) {
+    const homeOrDraw = `${homeName} or Draw`.trim().toLowerCase();
+    const awayOrDraw = `${awayName} or Draw`.trim().toLowerCase();
+    const homeOrAway = `${homeName} or ${awayName}`.trim().toLowerCase();
+    if (sel === homeOrDraw && (homeWins || draw)) return 'won';
+    if (sel === awayOrDraw && (awayWins || draw)) return 'won';
+    if (sel === homeOrAway && !draw) return 'won';
+    return 'lost';
+  }
+
+  // BTTS
+  if (marketLower.includes('both') && (marketLower.includes('score') || marketLower.includes('btts'))) {
+    const bothScored = h > 0 && a > 0;
+    if ((sel === 'yes' || selection === 'Yes') && bothScored) return 'won';
+    if ((sel === 'no' || selection === 'No') && !bothScored) return 'won';
+    return 'lost';
+  }
+
+  // Total Goals - Over/Under X.X
+  if (marketLower.includes('over/under') || (marketLower.includes('total goals') && marketLower.includes('over'))) {
+    const match = selection.match(/over\s*(\d+(?:\.\d+)?)/i) || selection.match(/(\d+(?:\.\d+)?)\s*over/i);
+    const line = match ? parseFloat(match[1]) : null;
+    if (line != null) {
+      if (total > line) return (sel.includes('over') || selection.startsWith('Over')) ? 'won' : 'lost';
+      if (total < line) return (sel.includes('under') || selection.startsWith('Under')) ? 'won' : 'lost';
+      return 'push';
+    }
+    // Fallback: "Over 2.5" / "Under 2.5" from label
+    const overMatch = selection.match(/over\s*(\d+\.?\d*)/i);
+    const underMatch = selection.match(/under\s*(\d+\.?\d*)/i);
+    if (overMatch) {
+      const lineVal = parseFloat(overMatch[1]);
+      if (total > lineVal) return 'won';
+      if (total < lineVal) return 'lost';
+      return 'push';
+    }
+    if (underMatch) {
+      const lineVal = parseFloat(underMatch[1]);
+      if (total < lineVal) return 'won';
+      if (total > lineVal) return 'lost';
+      return 'push';
+    }
+    return 'lost';
+  }
+
+  // Correct Score (Full Time)
+  if (marketLower.includes('correct score')) {
+    const parts = selection.split(/\s*[-–]\s*/);
+    if (parts.length >= 2) {
+      const sh = parseInt(parts[0], 10);
+      const sa = parseInt(parts[1], 10);
+      if (Number.isFinite(sh) && Number.isFinite(sa) && sh === h && sa === a) return 'won';
+    }
+    return 'lost';
+  }
+
+  // Total Goals - Odd/Even
+  if (marketLower.includes('odd') && marketLower.includes('even')) {
+    const isOdd = total % 2 === 1;
+    if ((sel === 'odd' || selection === 'Odd') && isOdd) return 'won';
+    if ((sel === 'even' || selection === 'Even') && !isOdd) return 'won';
+    return 'lost';
+  }
+
+  // Exact Number of Goals
+  if (marketLower.includes('exact number of goals')) {
+    const num = parseInt(selection.trim(), 10);
+    if (selection.trim() === '5+') return total >= 5 ? 'won' : 'lost';
+    if (Number.isFinite(num) && total === num) return 'won';
+    return 'lost';
+  }
+
+  // Method of Victory (Normal Time only for league)
+  if (marketLower.includes('method of victory')) {
+    if (draw) return 'lost';
+    if ((sel.includes(home) || selection.includes(homeName)) && selection.toLowerCase().includes('normal time') && homeWins) return 'won';
+    if ((sel.includes(away) || selection.includes(awayName)) && selection.toLowerCase().includes('normal time') && awayWins) return 'won';
+    return 'lost';
+  }
+
+  // Extra Time / Penalties (league = no)
+  if (marketLower.includes('extra time') || marketLower.includes('penalties')) {
+    const isYes = sel === 'yes' || selection === 'Yes';
+    return isYes ? 'lost' : 'won';
+  }
+
+  // Asian Handicap: "Team -0.5" means team must win; "+0.5" means draw or win. We only have full-time result.
+  if (marketLower.includes('asian handicap')) {
+    const homeMinus = selection.trim().startsWith(homeName) && selection.includes('-0.5');
+    const awayPlus = selection.trim().startsWith(awayName) && selection.includes('+0.5');
+    const homePlus = selection.trim().startsWith(homeName) && selection.includes('+0.5');
+    const awayMinus = selection.trim().startsWith(awayName) && selection.includes('-0.5');
+    if (homeMinus) return homeWins ? 'won' : 'lost';
+    if (awayPlus) return awayWins || draw ? 'won' : 'lost';
+    if (awayMinus) return awayWins ? 'won' : 'lost';
+    if (homePlus) return homeWins || draw ? 'won' : 'lost';
+    // -1.5 / +1.5 etc.
+    const homeHandicap = selection.includes(homeName) && selection.match(/-(\d+\.?\d*)/);
+    const awayHandicap = selection.includes(awayName) && selection.match(/\+(\d+\.?\d*)/);
+    if (homeHandicap) {
+      const line = parseFloat(homeHandicap[1]);
+      return (h - a) > line ? 'won' : 'lost';
+    }
+    if (awayHandicap) {
+      const line = parseFloat(awayHandicap[1]);
+      return (a - h) > line ? 'won' : 'lost';
+    }
+    return 'lost';
+  }
+
+  // Exact Winning Margin
+  if (marketLower.includes('winning margin')) {
+    if (draw) return 'lost';
+    const margin = Math.abs(h - a);
+    if (selection.includes('exactly 1') && margin === 1) {
+      return (homeWins && selection.includes(homeName)) || (awayWins && selection.includes(awayName)) ? 'won' : 'lost';
+    }
+    if (selection.includes('exactly 2') && margin === 2) {
+      return (homeWins && selection.includes(homeName)) || (awayWins && selection.includes(awayName)) ? 'won' : 'lost';
+    }
+    if (selection.includes('3+') && margin >= 3) {
+      return (homeWins && selection.includes(homeName)) || (awayWins && selection.includes(awayName)) ? 'won' : 'lost';
+    }
+    return 'lost';
+  }
+
+  // Half-time / First half / Second half: we don't have HT result in match doc → treat as lost (unknown)
+  if (marketLower.includes('half') || marketLower.includes('first half') || marketLower.includes('second half')) {
+    return 'lost';
+  }
+
+  // First scorer / player props: no scorer data in result → lost
+  if (marketLower.includes('first') && (marketLower.includes('score') || marketLower.includes('scorer'))) {
+    return 'lost';
+  }
+
+  // Default: compare selection to result (e.g. team name = winner)
+  if (homeWins && (sel === home || selection === homeName)) return 'won';
+  if (awayWins && (sel === away || selection === awayName)) return 'won';
+  if (draw && (sel === 'draw' || selection === 'Draw')) return 'won';
+  return 'lost';
+}
+
+/** Evaluate a full bet (all selections must win for bet to win; any push = stake back for that leg, treat as won for that leg). Returns { won, winningAmount }. */
+function evaluateBet(selections, result, homeName, awayName) {
+  const homeScore = Number(result?.homeScore) ?? 0;
+  const awayScore = Number(result?.awayScore) ?? 0;
+  if (!Array.isArray(selections) || selections.length === 0) {
+    return { won: false, winningAmount: 0 };
+  }
+  let allWonOrPush = true;
+  let totalWin = 0;
+  for (const sel of selections) {
+    const outcome = evaluateSelection(
+      sel.market,
+      sel.selection,
+      homeScore,
+      awayScore,
+      homeName,
+      awayName
+    );
+    if (outcome === 'lost') {
+      allWonOrPush = false;
+      break;
+    }
+    if (outcome === 'won') totalWin += Number(sel.win) || 0;
+    if (outcome === 'push') totalWin += Number(sel.risk) || 0; // stake returned
+  }
+  const totalStake = selections.reduce((sum, s) => sum + (Number(s.risk) || 0), 0);
+  if (!allWonOrPush) return { won: false, winningAmount: 0 };
+  return { won: true, winningAmount: totalWin };
+}
+
 const BETTING_RANDOM_NAMES = [
   'PitchKing', 'GoalMachine', 'BananaStriker', 'YellowBullet', 'TurfWarrior', 'NetBuster',
   'ShadowDribbler', 'GoldenBoot', 'AceWinger', 'MidfieldMaestro', 'DefensiveRock', 'TurboFwd',
@@ -868,6 +1090,43 @@ export default function Betting() {
   const [teamTotalsProbsState, setTeamTotalsProbsState] = useState({ home: null, away: null });
   const [cleanSheetProbsState, setCleanSheetProbsState] = useState({ home: null, away: null });
   const [refreshFixtureStatsTrigger, setRefreshFixtureStatsTrigger] = useState(0);
+  const [playedMatches, setPlayedMatches] = useState([]);
+
+  // Load played matches from Firestore (MatchDay results) to show final scores and lock markets
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const q = query(
+          collection(db, 'matches'),
+          orderBy('createdAt', 'desc'),
+          limit(300)
+        );
+        const snap = await getDocs(q);
+        if (cancelled) return;
+        const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        setPlayedMatches(list);
+      } catch (e) {
+        console.error('Failed to load played matches for betting:', e);
+        if (!cancelled) setPlayedMatches([]);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  // Set of fixture IDs that have a final result (from MatchDay) so we lock betting for them
+  const finishedFixtureIds = useMemo(() => {
+    const set = new Set();
+    if (!Array.isArray(playedMatches) || playedMatches.length === 0) return set;
+    tournaments.forEach((t) => {
+      const matches = generateLeagueFixtures(t, selectedDate);
+      matches.forEach((m) => {
+        const played = findPlayedMatchForFixture(m, t, playedMatches);
+        if (played != null) set.add(getFixtureId(m));
+      });
+    });
+    return set;
+  }, [tournaments, selectedDate, playedMatches]);
 
   // Track if a detail view has been opened in this session so we only clear
   // persisted state when the user explicitly navigates back, not on initial load.
@@ -913,11 +1172,17 @@ export default function Betting() {
 
   const handleConfirmSlip = async (slip, localStakes) => {
     if (!slip?.length) return;
+    // Reject if any selection is for a finished match (result already entered in MatchDay)
+    if (slip.some((sel) => finishedFixtureIds.has(sel.matchId))) return;
     const byMatch = {};
     slip.forEach((sel) => {
       const fid = sel.matchId; // fixture id per match (counted separately per match)
       if (!fid) return;
-      const risk = Math.max(0, Number(localStakes?.[sel.key]) || 0);
+      if (finishedFixtureIds.has(fid)) return;
+      const rawStake = Number(localStakes?.[sel.key]);
+      const risk = Number.isFinite(rawStake) ? rawStake : 0;
+      // Extra safety: ignore selections that don't meet the $1 minimum per selection.
+      if (risk < 1) return;
       const win = getPayout(risk, sel.odds).win;
       if (!byMatch[fid]) byMatch[fid] = { totalStake: 0, potentialWin: 0, selections: [] };
       byMatch[fid].totalStake += risk;
@@ -948,6 +1213,34 @@ export default function Betting() {
       }
     }
     setRefreshFixtureStatsTrigger((t) => t + 1);
+  };
+
+  // When a fixture is opened from the betting home page, navigate to the detail
+  // view and record a "view" in Firestore for that fixture.
+  const handleOpenMatch = async (match, tournament) => {
+    setDetailMatch(match);
+    setDetailTournament(tournament);
+    const played = findPlayedMatchForFixture(match, tournament, playedMatches);
+    setDetailTab(played ? 'bets-placed' : 'preview');
+    try {
+      const fixtureId = getFixtureId(match);
+      const ref = doc(db, BETTING_FIXTURES, fixtureId);
+      const snap = await getDoc(ref);
+      if (snap.exists()) {
+        await updateDoc(ref, { viewCount: increment(1) });
+      } else {
+        await setDoc(ref, {
+          viewCount: 1,
+          betCount: 0,
+          totalStaked: 0,
+          commentCount: 0,
+        });
+      }
+      // Trigger a refresh so MatchDetailView sees the latest stats.
+      setRefreshFixtureStatsTrigger((t) => t + 1);
+    } catch (e) {
+      console.error('Failed to record betting fixture view:', e);
+    }
   };
 
   useEffect(() => {
@@ -1013,7 +1306,7 @@ export default function Betting() {
 
       setDetailTournament(tournament);
       setDetailMatch(match);
-      if (parsed.tab && ['preview', 'probability', 'form', 'h2h', 'bet'].includes(parsed.tab)) {
+      if (parsed.tab && ['preview', 'probability', 'form', 'h2h', 'bet', 'bets-placed'].includes(parsed.tab)) {
         setDetailTab(parsed.tab);
       } else {
         setDetailTab('preview');
@@ -1375,6 +1668,11 @@ export default function Betting() {
           <MatchDetailView
             match={detailMatch}
             tournament={detailTournament}
+            isFinished={!!(detailMatch && detailTournament && findPlayedMatchForFixture(detailMatch, detailTournament, playedMatches))}
+            result={(() => {
+              const played = detailMatch && detailTournament ? findPlayedMatchForFixture(detailMatch, detailTournament, playedMatches) : null;
+              return played != null ? { homeScore: played.homeScore, awayScore: played.awayScore } : null;
+            })()}
             tab={detailTab}
             setTab={setDetailTab}
             formState={formState}
@@ -1433,16 +1731,20 @@ export default function Betting() {
               </div>
 
               {showCalendar && (
-                <CalendarGrid
-                  selectedDate={selectedDate}
-                  tournaments={tournaments}
-                  onSelectDate={(date) => {
-                    const d = new Date(date);
-                    d.setHours(0, 0, 0, 0);
-                    setSelectedDate(d);
-                    setShowCalendar(false);
-                  }}
-                />
+                <div className="flex justify-center">
+                  <div className="w-full max-w-md">
+                    <CalendarGrid
+                      selectedDate={selectedDate}
+                      tournaments={tournaments}
+                      onSelectDate={(date) => {
+                        const d = new Date(date);
+                        d.setHours(0, 0, 0, 0);
+                        setSelectedDate(d);
+                        setShowCalendar(false);
+                      }}
+                    />
+                  </div>
+                </div>
               )}
             </div>
 
@@ -1506,10 +1808,9 @@ export default function Betting() {
                             <MatchRow
                               key={m.id}
                               match={m}
+                              finishedMatch={findPlayedMatchForFixture(m, t, playedMatches)}
                               onOpen={() => {
-                                setDetailMatch(m);
-                                setDetailTournament(t);
-                                setDetailTab('preview');
+                                handleOpenMatch(m, t);
                               }}
                             />
                           ))}
@@ -1527,9 +1828,16 @@ export default function Betting() {
   );
 }
 
-function MatchRow({ match, onOpen }) {
+function MatchRow({ match, finishedMatch, onOpen }) {
   const homePlayersArr = match.homeTeamObj?.playerData || [];
   const awayPlayersArr = match.awayTeamObj?.playerData || [];
+  const isFinished = finishedMatch != null;
+  const homeScore = isFinished ? Number(finishedMatch.homeScore) : null;
+  const awayScore = isFinished ? Number(finishedMatch.awayScore) : null;
+  const scoreLabel =
+    isFinished && Number.isFinite(homeScore) && Number.isFinite(awayScore)
+      ? `${homeScore} – ${awayScore}`
+      : null;
 
   const is1v1 =
     homePlayersArr.length === 1 &&
@@ -1606,8 +1914,15 @@ function MatchRow({ match, onOpen }) {
             </span>
           )}
         </span>
-        <span className="text-[11px] uppercase tracking-[0.18em] text-gray-500">
-          vs
+        <span className="text-[11px] uppercase tracking-[0.18em] text-gray-500 flex flex-col items-center gap-0.5">
+          {scoreLabel != null ? (
+            <>
+              <span className="font-bold text-yellow-400 tabular-nums">{scoreLabel}</span>
+              <span className="text-[9px] font-black uppercase tracking-[0.2em] text-emerald-400/90">FT</span>
+            </>
+          ) : (
+            'vs'
+          )}
         </span>
         <span className="flex flex-col items-start max-w-[40%]">
           <span className="font-medium">
@@ -1633,7 +1948,7 @@ function MatchRow({ match, onOpen }) {
         </span>
       </span>
       <span className="ml-3 text-[11px] text-gray-500 hidden sm:inline">
-        {formatKickoffTime(match.kickoff)}
+        {isFinished ? 'Full time' : formatKickoffTime(match.kickoff)}
       </span>
     </button>
   );
@@ -1642,6 +1957,8 @@ function MatchRow({ match, onOpen }) {
 function MatchDetailView({
   match,
   tournament,
+  isFinished = false,
+  result = null,
   tab,
   setTab,
   onBack,
@@ -1665,8 +1982,47 @@ function MatchDetailView({
   const fixtureId = getFixtureId(match);
   const [fixtureStats, setFixtureStats] = useState({ viewCount: 0, betCount: 0, totalStaked: 0, commentCount: 0 });
   const [showCommentPanel, setShowCommentPanel] = useState(false);
+  const [betsPlaced, setBetsPlaced] = useState([]);
+  const [betsPlacedLoading, setBetsPlacedLoading] = useState(false);
+  const [betsPlacedError, setBetsPlacedError] = useState(null);
+  const [betsSortKey, setBetsSortKey] = useState('potentialWin'); // 'potentialWin' | 'stake'
+  const [betsOutcomeOrder, setBetsOutcomeOrder] = useState('default'); // 'default' | 'won-first' | 'lost-first'
 
-  // Load fixture doc (views, bet count, total staked, comment count) and record view once per session. Refetch when refreshFixtureStatsTrigger changes (e.g. after Confirm slip).
+  const sortedBetsPlaced = useMemo(() => {
+    if (!Array.isArray(betsPlaced) || betsPlaced.length === 0) return [];
+    const sortByKey = (arr) => {
+      const out = [...arr];
+      out.sort((a, b) => {
+        const aStake = Number(a.totalStake) || 0;
+        const bStake = Number(b.totalStake) || 0;
+        if (betsSortKey === 'stake') {
+          if (bStake !== aStake) return bStake - aStake;
+          const winA = (Number(a.potentialWin) ?? Number(a.winningAmount)) || 0;
+          const winB = (Number(b.potentialWin) ?? Number(b.winningAmount)) || 0;
+          return winB - winA;
+        }
+        const winA = (Number(a.potentialWin) ?? Number(a.winningAmount)) || 0;
+        const winB = (Number(b.potentialWin) ?? Number(b.winningAmount)) || 0;
+        if (winB !== winA) return winB - winA;
+        return bStake - aStake;
+      });
+      return out;
+    };
+    if (betsOutcomeOrder === 'default') {
+      return sortByKey(betsPlaced);
+    }
+    const won = betsPlaced.filter((b) => b.finalized && b.won);
+    const lost = betsPlaced.filter((b) => b.finalized && !b.won);
+    const pending = betsPlaced.filter((b) => !b.finalized);
+    const ordered =
+      betsOutcomeOrder === 'won-first'
+        ? [...sortByKey(won), ...sortByKey(lost), ...sortByKey(pending)]
+        : [...sortByKey(lost), ...sortByKey(won), ...sortByKey(pending)];
+    return ordered;
+  }, [betsPlaced, betsSortKey, betsOutcomeOrder]);
+
+  // Load fixture doc (views, bet count, total staked, comment count).
+  // Actual view increments are recorded when a fixture is opened from the betting home page.
   useEffect(() => {
     if (!fixtureId) return;
     let cancelled = false;
@@ -1676,40 +2032,119 @@ function MatchDetailView({
         const snap = await getDoc(ref);
         if (cancelled) return;
         const data = snap.data() || {};
-        setFixtureStats({
-          viewCount: data.viewCount ?? 0,
-          betCount: data.betCount ?? 0,
-          totalStaked: Number(data.totalStaked) ?? 0,
-          commentCount: data.commentCount ?? 0,
-        });
-        const viewedKey = BETTING_VIEWED_KEY + fixtureId;
-        if (typeof sessionStorage !== 'undefined' && !sessionStorage.getItem(viewedKey)) {
-          sessionStorage.setItem(viewedKey, '1');
-          if (snap.exists()) {
-            await updateDoc(ref, { viewCount: increment(1) });
-          } else {
-            await setDoc(ref, { viewCount: 1, betCount: 0, totalStaked: 0, commentCount: 0 });
-          }
-          if (!cancelled) setFixtureStats(prev => ({ ...prev, viewCount: snap.exists() ? (snap.data()?.viewCount ?? 0) + 1 : 1 }));
+
+        const viewCount = data.viewCount ?? 0;
+        const betCount = data.betCount ?? 0;
+        const totalStaked = Number(data.totalStaked ?? 0) || 0;
+        const commentCount = data.commentCount ?? 0;
+
+        if (!cancelled) {
+          setFixtureStats({
+            viewCount,
+            betCount,
+            totalStaked,
+            commentCount,
+          });
         }
       } catch (e) {
-        if (!cancelled) setFixtureStats({ viewCount: 0, betCount: 0, totalStaked: 0, commentCount: 0 });
+        if (!cancelled) {
+          setFixtureStats({ viewCount: 0, betCount: 0, totalStaked: 0, commentCount: 0 });
+        }
       }
     })();
     return () => { cancelled = true; };
   }, [fixtureId, refreshFixtureStatsTrigger]);
 
+  // Load all bets for this fixture; when match is finished, finalize any unfinalized bets (won/lost) and update Firestore.
+  useEffect(() => {
+    if (!fixtureId) return;
+    let cancelled = false;
+    const homeName = match?.home || 'Home';
+    const awayName = match?.away || 'Away';
+    (async () => {
+      try {
+        setBetsPlacedLoading(true);
+        setBetsPlacedError(null);
+        const qRef = query(
+          collection(db, BETTING_FIXTURES, fixtureId, 'bets'),
+          orderBy('createdAt', 'desc'),
+        );
+        const snap = await getDocs(qRef);
+        if (cancelled) return;
+        let rows = snap.docs.map((d) => {
+          const data = d.data() || {};
+          let createdAt = data.createdAt;
+          if (createdAt?.toDate) {
+            createdAt = createdAt.toDate();
+          } else if (typeof createdAt === 'string' || typeof createdAt === 'number') {
+            createdAt = new Date(createdAt);
+          } else {
+            createdAt = null;
+          }
+          return {
+            id: d.id,
+            totalStake: Number(data.totalStake) || 0,
+            potentialWin: Number(data.potentialWin) || 0,
+            selections: Array.isArray(data.selections) ? data.selections : [],
+            createdAt,
+            finalized: !!data.finalized,
+            won: data.won === true,
+            winningAmount: Number(data.winningAmount) || 0,
+          };
+        });
+
+        // If match is finished, evaluate and finalize any bet that isn't yet finalized
+        if (isFinished && result != null && Number.isFinite(result.homeScore) && Number.isFinite(result.awayScore)) {
+          for (let i = 0; i < snap.docs.length; i++) {
+            const d = snap.docs[i];
+            const data = d.data() || {};
+            if (data.finalized === true) continue;
+            const outcome = evaluateBet(rows[i].selections, result, homeName, awayName);
+            rows[i] = { ...rows[i], finalized: true, won: outcome.won, winningAmount: outcome.winningAmount };
+            try {
+              await updateDoc(d.ref, {
+                finalized: true,
+                won: outcome.won,
+                winningAmount: outcome.winningAmount,
+              });
+            } catch (err) {
+              console.error('Failed to finalize bet', d.id, err);
+            }
+            if (cancelled) return;
+          }
+        }
+        setBetsPlaced(rows);
+      } catch (e) {
+        if (!cancelled) {
+          setBetsPlacedError('Could not load bets placed for this game.');
+          setBetsPlaced([]);
+        }
+      } finally {
+        if (!cancelled) setBetsPlacedLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [fixtureId, refreshFixtureStatsTrigger, isFinished, result, match?.home, match?.away]);
+
   const kickoff = match.kickoff instanceof Date ? match.kickoff : new Date(match.kickoff);
   const kickoffText = kickoff.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
   const dateText = kickoff.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
 
-  const tabs = [
+  const allTabs = [
     { id: 'preview', label: 'Preview' },
     { id: 'probability', label: 'Probability' },
     { id: 'form', label: 'Form' },
     { id: 'h2h', label: 'Head to Head' },
     { id: 'bet', label: 'Bet' },
+    { id: 'bets-placed', label: 'Bets placed' },
   ];
+  const tabs = isFinished ? allTabs.filter((t) => t.id !== 'bet') : allTabs;
+  const scoreLabel =
+    isFinished && result != null && Number.isFinite(result.homeScore) && Number.isFinite(result.awayScore)
+      ? `${result.homeScore} – ${result.awayScore}`
+      : null;
 
   const probabilities =
     probState && probState.home != null && !probState.loading
@@ -1739,6 +2174,11 @@ function MatchDetailView({
   const homePlayersLine = formatPlayerLine(match.homeTeamObj);
   const awayPlayersLine = formatPlayerLine(match.awayTeamObj);
 
+  // If match is finished and user was on Bet tab, switch to Bets placed
+  useEffect(() => {
+    if (isFinished && tab === 'bet') setTab('bets-placed');
+  }, [isFinished, tab, setTab]);
+
   return (
     <div className="space-y-4">
       {/* Match header like FotMob */}
@@ -1752,16 +2192,28 @@ function MatchDetailView({
             <ChevronLeft className="w-3 h-3" />
             <span>Back to schedule</span>
           </button>
-          <div className="flex items-center gap-3">
-            <span className="flex items-center gap-1">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:gap-3 text-[11px] sm:text-xs text-gray-400">
+            <span className="inline-flex items-center gap-1">
               <CalendarDays className="w-3.5 h-3.5 text-yellow-400" />
               <span>{dateText} · {kickoffText}</span>
             </span>
-            {tournament?.name && (
-              <span className="hidden sm:inline text-[11px] text-gray-500">
-                {tournament.name}
-              </span>
-            )}
+            <span className="inline-flex items-center gap-2 mt-0.5 sm:mt-0">
+              {isFinished && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-400/60 text-[10px] font-black uppercase tracking-[0.2em] text-emerald-300">
+                  Full time
+                </span>
+              )}
+              {typeof match.matchNumber === 'number' && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/5 border border-white/10 text-[10px] uppercase tracking-[0.18em] text-gray-200">
+                  Match #{match.matchNumber}
+                </span>
+              )}
+              {tournament?.name && (
+                <span className="hidden sm:inline text-[11px] text-gray-500">
+                  {tournament.name}
+                </span>
+              )}
+            </span>
           </div>
         </div>
 
@@ -1776,8 +2228,15 @@ function MatchDetailView({
               </span>
             )}
           </span>
-          <span className="text-lg sm:text-2xl font-black text-white">
-            {kickoffText}
+          <span className="text-lg sm:text-2xl font-black text-white flex flex-col items-center gap-0.5">
+            {scoreLabel != null ? (
+              <>
+                <span className="tabular-nums text-yellow-400">{scoreLabel}</span>
+                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-400/90">FT</span>
+              </>
+            ) : (
+              kickoffText
+            )}
           </span>
           <span className="flex flex-col items-start max-w-[40%]">
             <span className="text-sm sm:text-base md:text-lg font-semibold text-gray-100">
@@ -1813,13 +2272,13 @@ function MatchDetailView({
       {/* Tab content below header */}
       <div className="space-y-3">
         {tab === 'preview' && (
-          <div className="space-y-4">
-            <div className="rounded-2xl border border-white/10 bg-[#050509]/95 p-4 text-sm text-gray-200">
-              <p className="font-semibold text-[13px] mb-2">
+          <div className="space-y-4 text-sm sm:text-base">
+            <div className="rounded-2xl border border-white/10 bg-[#050509]/95 p-4 text-current text-gray-200">
+              <p className="font-semibold text-sm sm:text-base mb-2">
                 Preview for <span className="text-yellow-300">{match.home}</span> vs{' '}
                 <span className="text-yellow-300">{match.away}</span>
               </p>
-              <p className="text-[11px] text-gray-400 leading-relaxed mb-4">
+              <p className="text-xs sm:text-sm text-gray-400 leading-relaxed mb-4">
                 This is a fun-only Banana FC matchup. Use the tabs above to explore win probabilities,
                 recent form, head-to-head meetings, and betting-style odds. No real money, no prizes –
                 just hype for the fixture.
@@ -1889,7 +2348,7 @@ function MatchDetailView({
                   {fixtureStats.commentCount > 0 ? formatCountShort(fixtureStats.commentCount) : 'Add comment'}
                 </button>
               </div>
-              <p className="text-[11px] text-gray-500">
+              <p className="text-xs sm:text-sm text-gray-500">
                 Share your prediction or hype. You’ll appear with a random username.
               </p>
             </div>
@@ -1908,45 +2367,52 @@ function MatchDetailView({
         )}
 
         {tab === 'probability' && (
-          <>
+          <div className="space-y-2 text-sm sm:text-base">
             {probState?.loading && (
-              <div className="rounded-2xl border border-white/10 bg-[#050509]/95 px-4 py-2 text-[11px] text-gray-400">
+              <div className="rounded-2xl border border-white/10 bg-[#050509]/95 px-4 py-2 text-sm sm:text-base text-gray-300">
                 Loading probability from match history…
               </div>
             )}
-            <ProbabilityPanel
-              match={match}
-              probabilities={probabilities}
-            />
-          </>
+            <div className="text-sm sm:text-base">
+              <ProbabilityPanel
+                match={match}
+                probabilities={probabilities}
+              />
+            </div>
+          </div>
         )}
 
         {tab === 'form' && (
-          formState?.loading ? (
-            <div className="rounded-2xl border border-white/10 bg-[#050509]/95 p-4 text-[11px] text-gray-400">
-              Loading recent form from Banana FC matches…
-            </div>
-          ) : (
-            <FormPanel
-              homeName={match.home}
-              awayName={match.away}
-              homeForm={homeForm}
-              awayForm={awayForm}
-              emptyMessage={is1v1Match ? 'No 1v1 matches yet' : 'No 2v2 matches yet'}
-            />
-          )
+          <div className="text-sm sm:text-base">
+            {formState?.loading ? (
+              <div className="rounded-2xl border border-white/10 bg-[#050509]/95 p-4 text-sm sm:text-base text-gray-300">
+                Loading recent form from Banana FC matches…
+              </div>
+            ) : (
+              <FormPanel
+                homeName={match.home}
+                awayName={match.away}
+                homeForm={homeForm}
+                awayForm={awayForm}
+                emptyMessage={is1v1Match ? 'No 1v1 matches yet' : 'No 2v2 matches yet'}
+              />
+            )}
+          </div>
         )}
 
         {tab === 'h2h' && (
-          <H2HPanel
-            match={match}
-            state={h2hState}
-          />
+          <div className="text-sm sm:text-base">
+            <H2HPanel
+              match={match}
+              state={h2hState}
+            />
+          </div>
         )}
 
         {tab === 'bet' && (
           <BetMarketsPanel
             match={match}
+            isFinished={isFinished}
             probState={probState}
             totalsProbs={totalsProbs}
             halfTimeProbs={halfTimeProbs}
@@ -1962,6 +2428,244 @@ function MatchDetailView({
             onConfirmSlip={onConfirmSlip}
           />
         )}
+
+        {tab === 'bets-placed' && (
+          <div className="space-y-3">
+            <div className="rounded-2xl border border-white/10 bg-[#050509]/95 p-5 text-sm text-gray-200 shadow-[0_0_30px_rgba(15,23,42,0.9)]">
+              <div className="flex items-center justify-between mb-3 gap-3 flex-wrap">
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className="relative">
+                    <div className="absolute inset-0 blur-md bg-gradient-to-r from-cyan-500 via-fuchsia-500 to-amber-400 rounded-full opacity-70" />
+                    <div className="relative h-8 w-8 rounded-full bg-black/80 border border-cyan-400/70 flex items-center justify-center">
+                      <TicketPercent className="w-4 h-4 text-cyan-300" />
+                    </div>
+                  </div>
+                  <div>
+                    <h3 className="text-sm sm:text-base font-black text-white uppercase tracking-[0.22em]">
+                      Bets placed
+                    </h3>
+                    <p className="text-[11px] sm:text-xs text-cyan-200/80">
+                      Live slip feed for this fixture.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 text-[11px] text-gray-400">
+                  <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-white/5 border border-white/10">
+                    <Users className="w-3.5 h-3.5 text-cyan-300" />
+                    <span className="uppercase tracking-[0.18em] text-[9px]">
+                      {fixtureStats.betCount} bets
+                    </span>
+                  </span>
+                  <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-emerald-500/10 border border-emerald-400/60">
+                    <Coins className="w-3.5 h-3.5 text-emerald-300" />
+                    <span className="uppercase tracking-[0.18em] text-[9px]">
+                      ${fixtureStats.totalStaked.toLocaleString()}
+                    </span>
+                  </span>
+                  <div className="flex flex-wrap items-center gap-2 ml-1">
+                    <span className="hidden sm:inline text-[10px] text-gray-500 uppercase tracking-[0.16em]">
+                      Outcome
+                    </span>
+                    <div className="inline-flex rounded-full bg-white/5 border border-white/10 p-0.5">
+                      <button
+                        type="button"
+                        onClick={() => setBetsOutcomeOrder(betsOutcomeOrder === 'won-first' ? 'default' : 'won-first')}
+                        className={`px-2 py-0.5 rounded-full text-[9px] uppercase tracking-[0.18em] ${
+                          betsOutcomeOrder === 'won-first'
+                            ? 'bg-emerald-500 text-black font-bold'
+                            : 'text-gray-300 hover:text-white'
+                        }`}
+                      >
+                        Won first
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setBetsOutcomeOrder(betsOutcomeOrder === 'lost-first' ? 'default' : 'lost-first')}
+                        className={`px-2 py-0.5 rounded-full text-[9px] uppercase tracking-[0.18em] ${
+                          betsOutcomeOrder === 'lost-first'
+                            ? 'bg-rose-500 text-black font-bold'
+                            : 'text-gray-300 hover:text-white'
+                        }`}
+                      >
+                        Lost first
+                      </button>
+                    </div>
+                    <span className="hidden sm:inline text-[10px] text-gray-500 uppercase tracking-[0.16em]">
+                      Sort by
+                    </span>
+                    <div className="inline-flex rounded-full bg-white/5 border border-white/10 p-0.5">
+                      <button
+                        type="button"
+                        onClick={() => setBetsSortKey('potentialWin')}
+                        className={`px-2 py-0.5 rounded-full text-[9px] uppercase tracking-[0.18em] ${
+                          betsSortKey === 'potentialWin'
+                            ? 'bg-emerald-500 text-black font-bold'
+                            : 'text-gray-300 hover:text-white'
+                        }`}
+                      >
+                        Win
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setBetsSortKey('stake')}
+                        className={`px-2 py-0.5 rounded-full text-[9px] uppercase tracking-[0.18em] ${
+                          betsSortKey === 'stake'
+                            ? 'bg-cyan-400 text-black font-bold'
+                            : 'text-gray-300 hover:text-white'
+                        }`}
+                      >
+                        Stake
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {betsPlacedLoading && (
+                <p className="text-xs text-gray-300">Loading bets…</p>
+              )}
+
+              {!betsPlacedLoading && betsPlacedError && (
+                <p className="text-xs text-red-400">{betsPlacedError}</p>
+              )}
+
+              {!betsPlacedLoading && !betsPlacedError && betsPlaced.length === 0 && (
+                <p className="text-xs text-gray-300">
+                  No bets have been placed yet for this game. Head to the <span className="font-semibold text-yellow-300">Bet</span> tab to place the first slip.
+                </p>
+              )}
+
+              {!betsPlacedLoading && !betsPlacedError && betsPlaced.length > 0 && (
+                <div className="mt-3 space-y-3">
+                  {sortedBetsPlaced.map((bet, index) => {
+                    const created =
+                      bet.createdAt instanceof Date && !Number.isNaN(bet.createdAt.getTime())
+                        ? bet.createdAt.toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+                        : 'Just now';
+                    const totalStakeLabel = bet.totalStake.toLocaleString();
+                    const potentialWinLabel = bet.potentialWin.toLocaleString();
+                    const count = bet.selections.length;
+                    const isBig = bet.totalStake >= 50;
+                    const isFinalized = !!bet.finalized;
+                    const isWon = isFinalized && !!bet.won;
+                    const winningAmountLabel = (bet.winningAmount ?? 0).toLocaleString();
+                    return (
+                      <motion.div
+                        key={bet.id}
+                        initial={{ opacity: 0, y: 8, scale: 0.98 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        transition={{ delay: index * 0.03 }}
+                        whileHover={{
+                          scale: 1.02,
+                          boxShadow: '0 0 30px rgba(56,189,248,0.55)',
+                          borderColor: 'rgba(56,189,248,0.6)',
+                        }}
+                        className={`rounded-xl bg-gradient-to-br from-slate-900/90 via-slate-950 to-slate-900 border p-3 sm:p-3.5 text-xs sm:text-sm text-gray-100 transition-all duration-150 ${
+                          isFinalized ? (isWon ? 'border-emerald-500/50' : 'border-rose-500/40') : 'border-cyan-500/40'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-cyan-500/10 border border-cyan-400/60 text-[10px] sm:text-[11px] uppercase tracking-[0.18em] text-cyan-200">
+                              <TicketPercent className="w-3.5 h-3.5 text-cyan-300" />
+                              {count === 1 ? 'Single bet' : `${count} picks`}
+                            </span>
+                            {isFinalized && (
+                              isWon ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-400/60 text-[9px] font-black uppercase tracking-[0.2em] text-emerald-300">
+                                  <Trophy className="w-3.5 h-3.5" />
+                                  Won
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-rose-500/20 border border-rose-400/60 text-[9px] font-bold uppercase tracking-[0.2em] text-rose-300">
+                                  Lost
+                                </span>
+                              )
+                            )}
+                            {isBig && (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-fuchsia-600/20 border border-fuchsia-400/60 text-[9px] uppercase tracking-[0.2em] text-fuchsia-200">
+                                High roller
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-[10px] sm:text-[11px] text-gray-400">
+                            {created}
+                          </span>
+                        </div>
+                        <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[11px] sm:text-xs text-gray-300">
+                              Stake:
+                            </span>
+                            <span className="text-sm sm:text-base font-bold text-cyan-200">
+                              ${totalStakeLabel}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            {isFinalized ? (
+                              isWon ? (
+                                <>
+                                  <span className="text-[11px] sm:text-xs text-gray-300">Payout:</span>
+                                  <span className="text-sm sm:text-base font-extrabold text-emerald-300">
+                                    +${winningAmountLabel}
+                                  </span>
+                                </>
+                              ) : (
+                                <>
+                                  <span className="text-[11px] sm:text-xs text-gray-300">Result:</span>
+                                  <span className="text-sm sm:text-base font-bold text-rose-300">
+                                    $0
+                                  </span>
+                                </>
+                              )
+                            ) : (
+                              <>
+                                <span className="text-[11px] sm:text-xs text-gray-300">
+                                  To win:
+                                </span>
+                                <span className="text-sm sm:text-base font-extrabold text-emerald-300">
+                                  ${potentialWinLabel}
+                                </span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                        <div className="mt-1 space-y-1.5">
+                          {bet.selections.map((sel, idx) => (
+                            <div
+                              key={idx}
+                              className="rounded-lg bg-slate-900/80 border border-white/10 px-2.5 py-1.5 flex flex-col gap-0.5 hover:border-cyan-400/60 hover:bg-slate-900 transition-colors"
+                            >
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="text-[10px] sm:text-[11px] uppercase tracking-[0.22em] text-gray-400">
+                                  {sel.market}
+                                </span>
+                                <span className="text-[11px] sm:text-xs font-semibold text-yellow-300">
+                                  {formatAmericanOdds(sel.odds)}
+                                </span>
+                              </div>
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="text-xs sm:text-[13px] font-medium text-gray-50">
+                                  {sel.selection}
+                                </span>
+                                <span className="text-[10px] sm:text-xs text-gray-300">
+                                  ${Number(sel.risk || 0).toLocaleString()} →{' '}
+                                  <span className="text-emerald-300 font-semibold">
+                                    ${Number(sel.win || 0).toLocaleString()}
+                                  </span>
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </motion.div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -1969,6 +2673,7 @@ function MatchDetailView({
 
 function BetMarketsPanel({
   match,
+  isFinished = false,
   probState,
   totalsProbs,
   halfTimeProbs,
@@ -1985,6 +2690,15 @@ function BetMarketsPanel({
 }) {
   const home = match.home || 'Home';
   const away = match.away || 'Away';
+
+  if (isFinished) {
+    return (
+      <div className="rounded-2xl border border-white/10 bg-[#050509]/95 p-6 text-center">
+        <p className="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-1">Markets closed</p>
+        <p className="text-xs text-gray-500">This match has finished. No new bets can be placed. View the Bets placed tab for existing slips.</p>
+      </div>
+    );
+  }
   const homePlayers = match.homeTeamObj?.playerData || [];
   const awayPlayers = match.awayTeamObj?.playerData || [];
   const is2v2 = homePlayers.length === 2 && awayPlayers.length === 2;
@@ -3105,6 +3819,7 @@ function BetSlipCard({ betslip, stake, totals, onToggleSelection, onStakeChange,
   const [winDraft, setWinDraft] = useState({}); // raw Win input while typing to avoid overwriting mid-edit
   const [confirming, setConfirming] = useState(false);
   const [placed, setPlaced] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
 
   useEffect(() => {
     if (!placed) return;
@@ -3124,8 +3839,31 @@ function BetSlipCard({ betslip, stake, totals, onToggleSelection, onStakeChange,
     return () => window.removeEventListener('bet-slip-toggle', handler);
   }, [chat]);
 
+  // Auto-clear inline error message after a short delay so it feels like a toast.
+  useEffect(() => {
+    if (!errorMessage) return;
+    const t = setTimeout(() => setErrorMessage(''), 2500);
+    return () => clearTimeout(t);
+  }, [errorMessage]);
+
   const handleConfirm = async () => {
     if (!onConfirmSlip || confirming) return;
+
+    // Enforce a minimum stake PER SELECTION so you can't leave some picks at $0.
+    // Every selection in the slip must have at least $1 risk.
+    const invalidSelections = [];
+    for (const sel of betslip) {
+      const raw = localStakes[sel.key];
+      const val = Number(raw);
+      if (!Number.isFinite(val) || val < 1) {
+        invalidSelections.push(sel);
+      }
+    }
+    if (invalidSelections.length > 0) {
+      setErrorMessage('Please enter at least $1 stake on every selection before confirming your slip.');
+      return;
+    }
+
     setConfirming(true);
     try {
       await onConfirmSlip(betslip, localStakes);
@@ -3169,6 +3907,31 @@ function BetSlipCard({ betslip, stake, totals, onToggleSelection, onStakeChange,
             </span>
           )}
         </div>
+
+        {/* Inline themed error toast for validation issues */}
+        <AnimatePresence>
+          {errorMessage && (
+            <motion.div
+              key="bet-slip-error"
+              initial={{ opacity: 0, y: -6, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -6, scale: 0.98 }}
+              className="mb-2 flex items-center gap-2 rounded-xl border border-rose-500/70 bg-rose-500/10 px-3 py-1.5 text-[10px] text-rose-100 shadow-[0_0_24px_rgba(244,63,94,0.5)]"
+            >
+              <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-rose-500 text-[10px] font-black">
+                !
+              </span>
+              <span className="flex-1">{errorMessage}</span>
+              <button
+                type="button"
+                onClick={() => setErrorMessage('')}
+                className="ml-1 text-rose-100/70 hover:text-rose-50"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Center-screen confirmation overlay, localized to this slip */}
         <AnimatePresence>
@@ -3254,7 +4017,8 @@ function BetSlipCard({ betslip, stake, totals, onToggleSelection, onStakeChange,
                         sel.odds,
                       )
                     }
-                    className="absolute -top-0.5 -right-0.5 text-[10px] leading-none text-cyan-200 hover:text-white bg-slate-900/80 border border-cyan-400/60 rounded-full w-4 h-4 flex items-center justify-center p-0"
+                    className="absolute -top-0.5 -right-0.5 text-[10px] leading-none text-slate-300 hover:text-rose-100 bg-slate-900/90 border border-slate-600/80 hover:border-rose-400/80 rounded-full w-4 h-4 flex items-center justify-center p-0 shadow-[0_0_10px_rgba(15,23,42,0.8)]"
+                    aria-label="Remove this selection from bet slip"
                   >
                     ×
                   </button>

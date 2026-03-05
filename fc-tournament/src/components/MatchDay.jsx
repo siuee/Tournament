@@ -148,6 +148,20 @@ export default function MatchDay({ onGoalScored }) {
       await updateDoc(doc(db, "tournaments", activeTournament.id), { teams: updatedTeams });
       const homeTeamPlayerIds = (matchData.homeTeam.playerData || []).map(p => p.id).filter(Boolean).sort();
       const awayTeamPlayerIds = (matchData.awayTeam.playerData || []).map(p => p.id).filter(Boolean).sort();
+
+      // Determine league-relative match number for this tournament (1,2,3...) based on existing matches.
+      let nextMatchNumber = 1;
+      try {
+        const existingForTournamentQuery = query(
+          collection(db, "matches"),
+          where("tournamentId", "==", activeTournament.id)
+        );
+        const existingSnap = await getDocs(existingForTournamentQuery);
+        nextMatchNumber = existingSnap.size + 1;
+      } catch (e) {
+        console.error("Failed to compute next match number; defaulting to 1", e);
+      }
+
       await addDoc(collection(db, "matches"), {
         tournamentId: activeTournament.id,
         tournamentType: activeTournament.type,
@@ -155,7 +169,8 @@ export default function MatchDay({ onGoalScored }) {
         homeTeamPlayerIds, awayTeamPlayerIds,
         homeScore: homeS, awayScore: awayS,
         homePlayerGoals, awayPlayerGoals,
-        createdAt: new Date()
+        createdAt: new Date(),
+        matchNumber: nextMatchNumber,
       });
       setShowMatchModal(false);
       setMatchData({ homeTeam: null, awayTeam: null, homeScore: '', awayScore: '', playerGoals: {} });
@@ -485,6 +500,8 @@ export default function MatchDay({ onGoalScored }) {
             if (!homePlayers?.length) homePlayers = [];
             if (!awayPlayers?.length) awayPlayers = [];
 
+            const displayMatchNumber = typeof m.matchNumber === 'number' ? m.matchNumber : undefined;
+
             return (
               <div key={m.id} className="bg-black p-5 sm:p-6 rounded-3xl border border-white/5 flex flex-col sm:flex-row items-center justify-between gap-4 hover:border-yellow-500/40 transition-all group relative overflow-hidden">
                 <img 
@@ -548,14 +565,21 @@ export default function MatchDay({ onGoalScored }) {
                       {m.homeScore} <span className="text-yellow-500 mx-1">:</span> {m.awayScore}
                     </span>
                   </div>
-                  <p className="text-[8px] sm:text-[9px] font-black text-gray-500 uppercase mt-2 tracking-[0.2em]">
-                    {m.tournamentType.replace('e', '')}
-                  </p>
-                  {m.createdAt && (
-                    <p className="text-[8px] sm:text-[9px] font-semibold text-gray-600 uppercase mt-1 tracking-widest">
-                      {formatMatchDateTime(m.createdAt)}
+                  <div className="mt-2 flex flex-col items-center gap-1">
+                    <p className="text-[8px] sm:text-[9px] font-black text-gray-500 uppercase tracking-[0.2em]">
+                      {m.tournamentType.replace('e', '')}
                     </p>
-                  )}
+                    {displayMatchNumber != null && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-yellow-500/10 border border-yellow-400/60 text-[8px] sm:text-[9px] font-semibold uppercase tracking-[0.22em] text-yellow-300">
+                        Match #{displayMatchNumber}
+                      </span>
+                    )}
+                    {m.createdAt && (
+                      <p className="text-[8px] sm:text-[9px] font-semibold text-gray-600 uppercase tracking-widest">
+                        {formatMatchDateTime(m.createdAt)}
+                      </p>
+                    )}
+                  </div>
                 </div>
               </div>
             );
