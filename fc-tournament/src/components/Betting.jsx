@@ -607,14 +607,6 @@ function computeWinProbabilities(match) {
   };
 }
 
-function computeFormString(team) {
-  const pts = team?.pts || 0;
-  if (pts >= 12) return 'W W W W D';
-  if (pts >= 8) return 'W W D W L';
-  if (pts >= 4) return 'W D L W L';
-  return 'L D L D W';
-}
-
 function getSafeTime(dateObj) {
   if (!dateObj) return 0;
   if (typeof dateObj.toMillis === 'function') return dateObj.toMillis();
@@ -882,6 +874,10 @@ export default function Betting() {
       return;
     }
 
+    const homePlayers = homeTeam.playerData || [];
+    const awayPlayers = awayTeam.playerData || [];
+    const isCurrent1v1 = homePlayers.length === 1 && awayPlayers.length === 1;
+
     let cancelled = false;
 
     (async () => {
@@ -890,10 +886,17 @@ export default function Betting() {
         const snap = await getDocs(collection(db, 'matches'));
         const all = snap.docs.map(d => ({ id: d.id, ...d.data() }));
 
-        const computeTeamForm = (team) => {
-          const teamMatches = all.filter(m =>
-            matchTeamToMatch(team, m, 'home') || matchTeamToMatch(team, m, 'away')
-          );
+        const computeTeamForm = (team, want1v1) => {
+          const teamMatches = all.filter(m => {
+            const isTeam =
+              matchTeamToMatch(team, m, 'home') || matchTeamToMatch(team, m, 'away');
+            if (!isTeam) return false;
+            const homeCount = Array.isArray(m.homeTeamPlayerIds) ? m.homeTeamPlayerIds.length : 0;
+            const awayCount = Array.isArray(m.awayTeamPlayerIds) ? m.awayTeamPlayerIds.length : 0;
+            const is1v1 = homeCount === 1 && awayCount === 1;
+            const is2v2 = homeCount === 2 && awayCount === 2;
+            return want1v1 ? is1v1 : is2v2;
+          });
           const sorted = [...teamMatches].sort((a, b) => getSafeTime(b.createdAt) - getSafeTime(a.createdAt));
           const formArr = [];
           sorted.forEach((m, idx) => {
@@ -906,8 +909,8 @@ export default function Betting() {
           return formArr.join(' ');
         };
 
-        const homeForm = computeTeamForm(homeTeam);
-        const awayForm = computeTeamForm(awayTeam);
+        const homeForm = computeTeamForm(homeTeam, isCurrent1v1);
+        const awayForm = computeTeamForm(awayTeam, isCurrent1v1);
 
         if (!cancelled) {
           setFormState({ loading: false, homeForm: homeForm || null, awayForm: awayForm || null });
@@ -1346,10 +1349,12 @@ function MatchDetailView({
     probState && probState.home != null && !probState.loading
       ? { home: probState.home, draw: probState.draw, away: probState.away }
       : computeWinProbabilities(match);
-  const fallbackHomeForm = computeFormString(match.homeTeamObj || {});
-  const fallbackAwayForm = computeFormString(match.awayTeamObj || {});
-  const homeForm = formState?.homeForm || fallbackHomeForm;
-  const awayForm = formState?.awayForm || fallbackAwayForm;
+  const homeForm = formState?.homeForm || '';
+  const awayForm = formState?.awayForm || '';
+
+  const homePlayers = match.homeTeamObj?.playerData || [];
+  const awayPlayers = match.awayTeamObj?.playerData || [];
+  const is1v1Match = homePlayers.length === 1 && awayPlayers.length === 1;
 
   const formatPlayerLine = (team) => {
     const arr = team?.playerData || [];
@@ -1480,6 +1485,7 @@ function MatchDetailView({
               awayName={match.away}
               homeForm={homeForm}
               awayForm={awayForm}
+              emptyMessage={is1v1Match ? 'No 1v1 matches yet' : 'No 2v2 matches yet'}
             />
           )
         )}
