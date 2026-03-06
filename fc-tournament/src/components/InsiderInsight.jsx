@@ -70,8 +70,8 @@ const SocialIcons = {
   ),
 };
 
-const BANANA_FC_BRANDING = ' | Made in Banana FC 🍌';
-const BANANA_FC_SHORT = 'Made in Banana FC 🍌';
+const BANANA_FC_BRANDING = ' | Made in Minions FC 🍌';
+const BANANA_FC_SHORT = 'Made in Minions FC 🍌';
 
 /** Build share payload with branding and link (for copy / WhatsApp / Telegram) */
 function buildSharePayload(caption, shareUrl, maxLen = 500) {
@@ -1125,7 +1125,7 @@ function CommentPanel({ postId, onClose, onAddComment, formatDate }) {
   );
 }
 
-/** Share modal – platform-specific options (Post, Story, Chat) with Banana FC branding */
+/** Share modal – platform-specific options (Post, Story, Chat) with Minions FC branding */
 function ShareModal({ post, onClose, onShared }) {
   if (!post) return null;
   const [shareCaption, setShareCaption] = useState(post.shareCaption || post.caption || '');
@@ -1160,7 +1160,7 @@ function ShareModal({ post, onClose, onShared }) {
   const handleNativeShare = async () => {
     const payload = buildSharePayload(shareText, shareUrl);
     const shareData = {
-      title: 'Banana FC',
+      title: 'Minions FC',
       text: (shareText || 'Check out this clip!').trim() + BANANA_FC_BRANDING,
       url: shareUrl,
     };
@@ -1229,7 +1229,7 @@ function ShareModal({ post, onClose, onShared }) {
             </motion.button>
           )}
           <p className="text-[10px] sm:text-[11px] text-amber-400/90">
-            All shares include &quot;Made in Banana FC 🍌&quot; + your link
+            All shares include &quot;Made in Minions FC 🍌&quot; + your link
           </p>
           <div>
             <label className="block text-[10px] font-black uppercase tracking-[0.18em] text-gray-400 mb-2">
@@ -1306,7 +1306,7 @@ function ShareModal({ post, onClose, onShared }) {
             whileTap={{ scale: 0.99 }}
             className="w-full py-3 rounded-xl bg-yellow-500/15 border border-yellow-500/40 text-yellow-400 font-bold text-xs sm:text-sm hover:bg-yellow-500/25 transition-colors"
           >
-            Copy link (with caption + Made in Banana FC)
+            Copy link (with caption + Made in Minions FC)
           </motion.button>
         </div>
 

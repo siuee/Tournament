@@ -340,7 +340,7 @@ function generateCommentatorPreview({
   const openings = [
     `Ohhh, what a fixture we have here! ${homeName} and ${awayName} — the stage is set for something magisterial!`,
     `Ladies and gentlemen, strap in! When ${homeName} meet ${awayName}, it's poetry in motion waiting to happen.`,
-    `The theatre of Banana FC is calling! ${homeName} versus ${awayName} — this is the kind of football that makes your soul sing.`,
+    `The theatre of Minions FC is calling! ${homeName} versus ${awayName} — this is the kind of football that makes your soul sing.`,
     `Here we go! ${homeName} and ${awayName} — two sides ready to paint this pitch with their artistry.`,
     `What a collision we have in store! ${homeName} against ${awayName} — this is football at its most delicious.`,
   ];
@@ -432,7 +432,7 @@ function generateCommentatorPreview({
 
   if (bigOccasion) {
     lines.push(pick([
-      'The eyes of Banana FC are upon this one. A fixture that has captured the imagination. Magnificent!',
+      'The eyes of Minions FC are upon this one. A fixture that has captured the imagination. Magnificent!',
       "This is the one everyone's been talking about. The build-up has been delicious — now for the main course.",
     ], 'big'));
   }
@@ -932,10 +932,10 @@ function getSafeTime(dateObj) {
 
 // Betting fixture doc id for Firestore (views, bet count, total staked, comments)
 const BETTING_FIXTURES = 'betting_fixtures';
-const BETTING_VIEWED_KEY = 'banana-betting-viewed-';
+const BETTING_VIEWED_KEY = 'minions-betting-viewed-';
 
-// Persist detail view + inner tab so refresh keeps user on same match + tab (localStorage = survives refresh)
-const BETTING_DETAIL_STATE_KEY = 'banana-betting-detail-state-v2';
+// Persist detail view + inner tab so refresh keeps user on the same match + tab (localStorage = survives refresh)
+const BETTING_DETAIL_STATE_KEY = 'minions-betting-detail-state-v2';
 
 function getBettingDetailStorage() {
   if (typeof window === 'undefined') return null;
@@ -959,7 +959,7 @@ function setBettingDetailStorage(val) {
 }
 
 // Persist selected date on betting landing page
-const BETTING_SELECTED_DATE_KEY = 'banana-betting-selected-date-v1';
+const BETTING_SELECTED_DATE_KEY = 'minions-betting-selected-date-v1';
 
 function getFixtureId(match) {
   if (match?.id) return String(match.id);
@@ -1617,7 +1617,7 @@ export default function Betting() {
             const rawType = t.type || '';
             const sourceName = t.name || rawType || '';
             let name = sourceName || 'Tournament';
-            let region = `${rawType || sourceName || 'Banana FC'} · ${String(t.format || '').toUpperCase()}`.trim();
+            let region = `${rawType || sourceName || 'Minions FC'} · ${String(t.format || '').toUpperCase()}`.trim();
             return {
               id: t.id,
               name,
@@ -2058,16 +2058,16 @@ export default function Betting() {
           </motion.div>
           <div className="min-w-0">
             <h1 className="text-2xl md:text-3xl font-black italic uppercase tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 via-yellow-200 to-yellow-500 pr-2">
-              Banana Betting Zone
+              Minions Betting Zone
             </h1>
             <p className="text-[11px] text-gray-400 font-medium">
-              Fixtures from your tournaments for hype only – no real money, just Banana FC drama.
+              Fixtures from your tournaments for hype only – no real money, just Minions FC drama.
             </p>
           </div>
         </div>
         <div className="hidden md:flex items-center gap-2 text-[10px] uppercase tracking-[0.2em] text-gray-400">
           <Flame className="w-4 h-4 text-yellow-400" />
-          <span>Upcoming fixtures · Banana FC</span>
+          <span>Upcoming fixtures · Minions FC</span>
         </div>
       </motion.div>
 
@@ -2981,7 +2981,7 @@ function MatchDetailView({
           <div className="text-sm sm:text-base">
             {formState?.loading ? (
               <div className="rounded-2xl border border-white/10 bg-[#050509]/95 p-4 text-sm sm:text-base text-gray-300">
-                Loading recent form from Banana FC matches…
+                Loading recent form from Minions FC matches…
               </div>
             ) : (
               <FormPanel

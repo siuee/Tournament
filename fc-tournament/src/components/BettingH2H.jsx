@@ -7,7 +7,7 @@ export function H2HPanel({ match, state }) {
     return (
       <div className="rounded-2xl border border-cyan-500/40 bg-[#020617]/90 p-4 text-sm text-slate-100 shadow-[0_0_22px_rgba(34,211,238,0.6)]">
         <p className="mb-1 font-semibold text-cyan-100">Head to head</p>
-        <p className="text-[11px] text-slate-400">Loading previous Banana FC meetings…</p>
+        <p className="text-[11px] text-slate-400">Loading previous Minions FC meetings…</p>
       </div>
     );
   }
@@ -26,7 +26,7 @@ export function H2HPanel({ match, state }) {
       <div className="rounded-2xl border border-cyan-500/40 bg-[#020617]/90 p-4 text-sm text-slate-100 shadow-[0_0_22px_rgba(34,211,238,0.6)]">
         <p className="mb-1 font-semibold text-cyan-100">Head to head</p>
         <p className="text-[11px] text-slate-400">
-          These teams have not met yet in recorded Banana FC matches. Their first clash will set the tone.
+          These teams have not met yet in recorded Minions FC matches. Their first clash will set the tone.
         </p>
       </div>
     );

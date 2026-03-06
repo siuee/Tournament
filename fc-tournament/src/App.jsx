@@ -24,14 +24,7 @@ const StarShockwavesLite = () => {
   return <Suspense fallback={<div className="fixed inset-0 z-[-10] bg-gradient-to-b from-[#0a0505] via-[#1a0a05] to-[#050505]" />}><StarShockwaves /></Suspense>;
 };
 
-// --- BRANDING SVG ---
-const BananaIcon = ({ className }) => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={className}>
-    <path d="M4 13c3.5-2 8-2 10 2a8.2 8.2 0 0 1-1 4.93M4 13c-1.5 6 1.5 9 1.5 9s3-3 1.5-9" />
-    <path d="M14 15c4-2 6-6 2-11-2 1-4.5 2.5-6 5" />
-    <path d="M15 4c1-1 3-1 4 0l2 2" />
-  </svg>
-);
+// (Logo is provided by GIF asset /assets/leagues/minions.gif in the navbar)
 
 // --- REALISTIC 3D GLASS SHATTER & SHARDS ---
 const RealisticGlassShatter = () => {
@@ -84,7 +77,7 @@ const RealisticGlassShatter = () => {
   );
 };
 
-const TAB_STORAGE_KEY = 'banana-fc-active-tab';
+const TAB_STORAGE_KEY = 'minions-fc-active-tab';
 const VALID_TABS = ['standings', 'match', 'insider', 'betting', 'locker'];
 
 function App() {
@@ -93,7 +86,7 @@ function App() {
   const [activeTab, setActiveTab] = useState(() => {
     if (typeof window === 'undefined') return 'standings';
     try {
-      const detailRaw = localStorage.getItem('banana-betting-detail-state-v2') || sessionStorage.getItem('banana-betting-detail-state-v2');
+      const detailRaw = localStorage.getItem('minions-betting-detail-state-v2') || sessionStorage.getItem('minions-betting-detail-state-v2');
       if (detailRaw) {
         const d = JSON.parse(detailRaw);
         if (d?.matchId && d?.tournamentId) return 'betting';
@@ -236,10 +229,16 @@ function App() {
             <div className="px-4 lg:px-8 py-4 flex justify-between items-center gap-4 max-w-7xl mx-auto">
               {/* Logo */}
               <div className="flex items-center gap-2 lg:gap-3 min-w-0">
-                <div className="text-yellow-500 drop-shadow-[0_0_10px_rgba(234,179,8,0.5)]"><BananaIcon className="w-8 h-8" /></div>
+                <div className="w-9 h-9 rounded-full overflow-hidden border border-yellow-500/70 bg-black/40 shadow-[0_0_14px_rgba(234,179,8,0.5)]">
+                  <img
+                    src="/assets/leagues/minions.gif"
+                    alt="Minions FC logo"
+                    className="w-full h-full object-cover"
+                  />
+                </div>
                 <div className="flex flex-col">
                   <h1 className="text-lg lg:text-xl font-black italic tracking-tighter uppercase leading-none text-white line-clamp-1">
-                    Banana <span className="text-yellow-500">FC</span>
+                    Minions <span className="text-yellow-500">FC</span>
                   </h1>
                   <span className="text-[7px] font-black tracking-[0.3em] text-gray-500 uppercase">Tournament Hub</span>
                 </div>
