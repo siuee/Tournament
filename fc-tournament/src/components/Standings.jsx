@@ -17,8 +17,8 @@ export default function Standings() {
   const leagueIcons = {
     'ePremier League': '/assets/leagues/pl.svg',
     'eLaLiga': '/assets/leagues/laliga.svg',
-    'eSerie A': '/assets/leagues/seriea.svg',
-    'eLigue 1': '/assets/leagues/ligue1.svg',
+    'eSerie A': '/assets/leagues/seriea.png',
+    'eLigue 1': '/assets/leagues/ligue1.png',
     'eInternational': '/assets/leagues/nepal.svg',
     'eChampions League': '/assets/leagues/ucl.jpg'
   };
