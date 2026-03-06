@@ -88,9 +88,16 @@ const TAB_STORAGE_KEY = 'banana-fc-active-tab';
 const VALID_TABS = ['standings', 'match', 'insider', 'betting', 'locker'];
 
 function App() {
+  // Restore last tab on refresh from sessionStorage (Standings, Match Day, Celebration, Betting, Club).
+  // If betting fixture state exists (user was inside a fixture), open Betting so it can restore.
   const [activeTab, setActiveTab] = useState(() => {
     if (typeof window === 'undefined') return 'standings';
     try {
+      const detailRaw = localStorage.getItem('banana-betting-detail-state-v2') || sessionStorage.getItem('banana-betting-detail-state-v2');
+      if (detailRaw) {
+        const d = JSON.parse(detailRaw);
+        if (d?.matchId && d?.tournamentId) return 'betting';
+      }
       const saved = sessionStorage.getItem(TAB_STORAGE_KEY);
       if (saved && VALID_TABS.includes(saved)) return saved;
     } catch {}

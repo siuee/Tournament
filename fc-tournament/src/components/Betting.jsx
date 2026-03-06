@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useRef } from 'react';
+import { useEffect, useLayoutEffect, useState, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Trophy,
@@ -749,8 +749,29 @@ function getSafeTime(dateObj) {
 const BETTING_FIXTURES = 'betting_fixtures';
 const BETTING_VIEWED_KEY = 'banana-betting-viewed-';
 
-// Persist detail view + inner tab so refresh keeps user on same match + tab
-const BETTING_DETAIL_STATE_KEY = 'banana-betting-detail-state-v1';
+// Persist detail view + inner tab so refresh keeps user on same match + tab (localStorage = survives refresh)
+const BETTING_DETAIL_STATE_KEY = 'banana-betting-detail-state-v2';
+
+function getBettingDetailStorage() {
+  if (typeof window === 'undefined') return null;
+  try {
+    return localStorage.getItem(BETTING_DETAIL_STATE_KEY) || sessionStorage.getItem(BETTING_DETAIL_STATE_KEY);
+  } catch {
+    return null;
+  }
+}
+function setBettingDetailStorage(val) {
+  if (typeof window === 'undefined') return;
+  try {
+    if (val) {
+      localStorage.setItem(BETTING_DETAIL_STATE_KEY, val);
+      sessionStorage.setItem(BETTING_DETAIL_STATE_KEY, val);
+    } else {
+      localStorage.removeItem(BETTING_DETAIL_STATE_KEY);
+      sessionStorage.removeItem(BETTING_DETAIL_STATE_KEY);
+    }
+  } catch {}
+}
 
 // Persist selected date on betting landing page
 const BETTING_SELECTED_DATE_KEY = 'banana-betting-selected-date-v1';
@@ -1123,7 +1144,7 @@ function BettingCommentPanel({ fixtureId, commentCount, onClose, onCommentAdded 
             <X className="w-5 h-5" />
           </button>
         </div>
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        <div className="flex-1 overflow-y-auto p-4 space-y-4 no-scrollbar">
           {loading ? (
             <div className="flex justify-center py-8"><Loader2 className="w-8 h-8 text-yellow-500 animate-spin" /></div>
           ) : comments.length === 0 ? (
@@ -1170,8 +1191,8 @@ export default function Betting() {
   const [expandedIds, setExpandedIds] = useState(() => new Set());
   const [betslip, setBetslip] = useState([]);
   const [stake, setStake] = useState('10');
+  // Default to today; restore last selected date from sessionStorage when on fixtures list (no fixture open)
   const [selectedDate, setSelectedDate] = useState(() => {
-    // Try to restore the last selected date so refresh keeps you on the same slate
     try {
       if (typeof window !== 'undefined' && typeof sessionStorage !== 'undefined') {
         const stored = sessionStorage.getItem(BETTING_SELECTED_DATE_KEY);
@@ -1183,9 +1204,7 @@ export default function Betting() {
           }
         }
       }
-    } catch (e) {
-      // ignore and fall back to today
-    }
+    } catch {}
     const d = new Date();
     d.setHours(0, 0, 0, 0);
     return d;
@@ -1278,34 +1297,42 @@ export default function Betting() {
     selectedDate.getDate() === today.getDate()
   );
 
-  // Track if a detail view has been opened in this session so we only clear
-  // persisted state when the user explicitly navigates back, not on initial load.
   const hadDetailRef = useRef(false);
+  const restoreAttemptedRef = useRef(false);
+  // Capture restore payload once on first render so no effect can clear storage before we use it
+  const pendingRestorePayloadRef = useRef(null);
+  if (pendingRestorePayloadRef.current === null && typeof window !== 'undefined') {
+    try {
+      const raw = getBettingDetailStorage();
+      if (raw) {
+        const p = JSON.parse(raw);
+        if (p?.matchId && p?.tournamentId) pendingRestorePayloadRef.current = p;
+      }
+    } catch {}
+  }
 
-  // Persist which match + inner tab the user is viewing so refresh keeps them there
+  const [isRestoring, setIsRestoring] = useState(() => !!pendingRestorePayloadRef.current);
+
+  // Persist match + inner tab + date to localStorage (survives refresh) so we never lose fixture state
   useEffect(() => {
     try {
-      if (typeof window === 'undefined' || typeof sessionStorage === 'undefined') return;
+      if (typeof window === 'undefined') return;
       if (!detailMatch || !detailTournament) {
-        // On first mount after a hard refresh, we don't want to immediately
-        // wipe out the stored detail state before we get a chance to restore it.
-        // Only clear if we've actually had a detail view open during this session.
         if (hadDetailRef.current) {
-          sessionStorage.removeItem(BETTING_DETAIL_STATE_KEY);
+          setBettingDetailStorage(null);
         }
         return;
       }
       hadDetailRef.current = true;
-      const payload = {
+      const dateIso = selectedDate instanceof Date ? selectedDate.toISOString().slice(0, 10) : null;
+      setBettingDetailStorage(JSON.stringify({
         matchId: detailMatch.id,
         tournamentId: detailTournament.id,
         tab: detailTab,
-      };
-      sessionStorage.setItem(BETTING_DETAIL_STATE_KEY, JSON.stringify(payload));
-    } catch (e) {
-      // ignore storage failures
-    }
-  }, [detailMatch, detailTournament, detailTab]);
+        selectedDate: dateIso,
+      }));
+    } catch {}
+  }, [detailMatch, detailTournament, detailTab, selectedDate]);
 
   // Persist selected date whenever it changes so a full page refresh keeps the same day
   useEffect(() => {
@@ -1430,41 +1457,79 @@ export default function Betting() {
     return () => { mounted = false; };
   }, []);
 
-  // On first load, try to restore the last opened match + tab (detail view) from sessionStorage
-  useEffect(() => {
+  // Restore fixture + tab from localStorage before paint (useLayoutEffect) so we never flash landing
+  useLayoutEffect(() => {
     try {
-      if (typeof window === 'undefined' || typeof sessionStorage === 'undefined') return;
+      if (typeof window === 'undefined') return;
       if (!tournaments.length) return;
-      if (detailMatch) return; // don't override if user already picked something this session
-
-      const raw = sessionStorage.getItem(BETTING_DETAIL_STATE_KEY);
-      if (!raw) return;
-      let parsed;
-      try {
-        parsed = JSON.parse(raw);
-      } catch {
+      if (detailMatch) {
+        setIsRestoring(false);
         return;
       }
-      if (!parsed || !parsed.matchId || !parsed.tournamentId) return;
+      if (restoreAttemptedRef.current) {
+        setIsRestoring(false);
+        return;
+      }
 
-      const tournament = tournaments.find(t => t.id === parsed.tournamentId);
-      if (!tournament) return;
+      const parsed = pendingRestorePayloadRef.current || (() => {
+        try {
+          const raw = getBettingDetailStorage();
+          if (!raw) return null;
+          const p = JSON.parse(raw);
+          return p?.matchId && p?.tournamentId ? p : null;
+        } catch {
+          return null;
+        }
+      })();
+      if (!parsed?.matchId || !parsed?.tournamentId) {
+        setIsRestoring(false);
+        return;
+      }
 
-      const matches = generateLeagueFixtures(tournament, selectedDate);
-      const match = matches.find(m => String(m.id) === String(parsed.matchId));
-      if (!match) return;
+      const tournament = tournaments.find(t => String(t.id) === String(parsed.tournamentId));
+      if (!tournament) {
+        setIsRestoring(false);
+        return;
+      }
 
+      let restoreDate = null;
+      if (parsed.selectedDate) {
+        const parts = String(parsed.selectedDate).split('-').map(Number);
+        if (parts.length === 3 && parts.every(Number.isFinite)) {
+          restoreDate = new Date(parts[0], parts[1] - 1, parts[2]);
+          restoreDate.setHours(0, 0, 0, 0);
+        }
+      }
+      const dateForFixtures = restoreDate && !Number.isNaN(restoreDate.getTime()) ? restoreDate : selectedDate;
+      // Fixture list can come from generateLeagueFixtures (calendar date) or getUpcomingFixtures (today);
+      // ids differ (idx 0,1,2 vs matchNum 1,2,3), so look in both.
+      let match =
+        generateLeagueFixtures(tournament, dateForFixtures).find(m => String(m.id) === String(parsed.matchId)) ||
+        getUpcomingFixtures(tournament, playedMatches, dateForFixtures).find(m => String(m.id) === String(parsed.matchId));
+      if (!match) {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        match =
+          generateLeagueFixtures(tournament, today).find(m => String(m.id) === String(parsed.matchId)) ||
+          getUpcomingFixtures(tournament, playedMatches, today).find(m => String(m.id) === String(parsed.matchId));
+      }
+      if (!match) {
+        setIsRestoring(false);
+        return;
+      }
+
+      restoreAttemptedRef.current = true;
+      if (restoreDate && !Number.isNaN(restoreDate.getTime())) {
+        setSelectedDate(restoreDate);
+      }
       setDetailTournament(tournament);
       setDetailMatch(match);
-      if (parsed.tab && ['preview', 'probability', 'form', 'h2h', 'bet', 'bets-placed'].includes(parsed.tab)) {
-        setDetailTab(parsed.tab);
-      } else {
-        setDetailTab('preview');
-      }
-    } catch (e) {
-      // ignore restoration failures
+      setDetailTab(['preview', 'probability', 'form', 'h2h', 'bet', 'bets-placed'].includes(parsed.tab) ? parsed.tab : 'preview');
+      setIsRestoring(false);
+    } catch {
+      setIsRestoring(false);
     }
-  }, [tournaments, selectedDate, detailMatch]);
+  }, [tournaments, selectedDate, detailMatch, playedMatches]);
 
   const toggleTournament = (id) => {
     setExpandedIds(prev => {
@@ -1792,11 +1857,20 @@ export default function Betting() {
   return (
     <div className="relative flex flex-col gap-4 w-full pb-28 md:pb-20">
       {/* Header */}
-      <div className="flex items-center justify-between gap-4 mb-2">
+      <motion.div
+        initial={{ opacity: 0, y: -8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3 }}
+        className="flex items-center justify-between gap-4 mb-2 flex-shrink-0"
+      >
         <div className="flex items-center gap-3 min-w-0 flex-1 pr-2">
-          <div className="p-2 rounded-2xl bg-yellow-500/10 border border-yellow-500/40 shadow-[0_0_24px_rgba(250,204,21,0.35)] shrink-0">
+          <motion.div
+            animate={{ opacity: [1, 0.85, 1] }}
+            transition={{ duration: 2.5, repeat: Infinity, ease: 'easeInOut' }}
+            className="p-2 rounded-2xl bg-yellow-500/10 border border-yellow-500/40 shadow-[0_0_24px_rgba(250,204,21,0.35)] shrink-0"
+          >
             <TicketPercent className="w-6 h-6 text-yellow-400" />
-          </div>
+          </motion.div>
           <div className="min-w-0">
             <h1 className="text-2xl md:text-3xl font-black italic uppercase tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 via-yellow-200 to-yellow-500 pr-2">
               Banana Betting Zone
@@ -1810,11 +1884,16 @@ export default function Betting() {
           <Flame className="w-4 h-4 text-yellow-400" />
           <span>Upcoming fixtures · Banana FC</span>
         </div>
-      </div>
+      </motion.div>
 
-      {/* Main content: schedule or match detail */}
+      {/* Main content: schedule or match detail – flows with page (no inner scrollbar) */}
       <div className="space-y-4 w-full">
-        {detailMatch ? (
+        {isRestoring && !detailMatch ? (
+          <div className="flex flex-col items-center justify-center py-16 gap-4 rounded-3xl border border-white/10 bg-[#050509]/95">
+            <Loader2 className="w-10 h-10 text-yellow-500 animate-spin" />
+            <p className="text-sm text-gray-400">Restoring your fixture…</p>
+          </div>
+        ) : detailMatch ? (
           <MatchDetailView
             match={detailMatch}
             tournament={detailTournament}
@@ -1850,7 +1929,12 @@ export default function Betting() {
         ) : (
           <>
             {/* Date selector / calendar bar — centered */}
-            <div className="flex flex-col gap-2 rounded-3xl border border-white/10 bg-[#050509]/80 px-3 sm:px-4 py-2.5 shadow-[0_0_24px_rgba(0,0,0,0.55)]">
+            <motion.div
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3 }}
+              className="flex flex-col gap-2 rounded-3xl border border-white/10 bg-[#050509]/80 px-3 sm:px-4 py-2.5 shadow-[0_0_24px_rgba(0,0,0,0.55)]"
+            >
               <div className="flex items-center justify-center gap-3">
                 <button
                   type="button"
@@ -1899,7 +1983,7 @@ export default function Betting() {
                   </div>
                 </div>
               )}
-            </div>
+            </motion.div>
 
             {/* Today: show upcoming fixtures. Other dates: show results for that day or "no results" */}
             <div className="space-y-4">
@@ -1924,8 +2008,9 @@ export default function Betting() {
                     return (
                       <motion.section
                         key={t.id}
-                        initial={{ opacity: 0, y: 4 }}
+                        initial={{ opacity: 0, y: 8 }}
                         animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.35, ease: 'easeOut' }}
                         className="rounded-3xl overflow-hidden bg-[#050509]/95 border border-white/10 shadow-[0_0_30px_rgba(0,0,0,0.7)]"
                       >
                         <button
@@ -2447,8 +2532,9 @@ function MatchDetailView({
 
   return (
     <div className="space-y-4">
-      {/* Match header like FotMob */}
-      <div className="rounded-3xl border border-white/10 bg-[#050509]/95 px-4 sm:px-6 py-4 shadow-[0_0_32px_rgba(0,0,0,0.7)]">
+      {/* Match header like FotMob – gradient border */}
+      <div className="relative p-[1px] rounded-3xl betting-gradient-border shadow-[0_0_32px_rgba(0,0,0,0.7)]">
+        <div className="rounded-3xl bg-[#050509]/95 px-4 sm:px-6 py-4 border border-white/5">
         <div className="flex items-center justify-between gap-3 text-xs text-gray-400 mb-3">
           <button
             type="button"
@@ -2533,12 +2619,18 @@ function MatchDetailView({
             </button>
           ))}
         </div>
+        </div>
       </div>
 
       {/* Tab content below header */}
       <div className="space-y-3">
         {tab === 'preview' && (
-          <div className="space-y-4 text-sm sm:text-base">
+          <motion.div
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.25 }}
+            className="space-y-4 text-sm sm:text-base"
+          >
             <div className="rounded-2xl border border-white/10 bg-[#050509]/95 p-4 text-current text-gray-200">
               <p className="font-semibold text-sm sm:text-base mb-2">
                 Preview for <span className="text-yellow-300">{match.home}</span> vs{' '}
@@ -2629,23 +2721,32 @@ function MatchDetailView({
                 />
               )}
             </AnimatePresence>
-          </div>
+          </motion.div>
         )}
 
         {tab === 'probability' && (
-          <div className="space-y-2 text-sm sm:text-base">
+          <motion.div
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.25 }}
+            className="space-y-2 text-sm sm:text-base"
+          >
             {probState?.loading && (
               <div className="rounded-2xl border border-white/10 bg-[#050509]/95 px-4 py-2 text-sm sm:text-base text-gray-300">
                 Loading probability from match history…
               </div>
             )}
-            <div className="text-sm sm:text-base">
-              <ProbabilityPanel
-                match={match}
-                probabilities={probabilities}
-              />
+            <div className="relative p-[1px] rounded-2xl betting-gradient-border">
+              <div className="rounded-2xl bg-[#050509]/95 overflow-y-auto overflow-x-hidden max-h-[min(70vh,480px)] no-scrollbar">
+                <div className="text-sm sm:text-base p-1">
+                  <ProbabilityPanel
+                    match={match}
+                    probabilities={probabilities}
+                  />
+                </div>
+              </div>
             </div>
-          </div>
+          </motion.div>
         )}
 
         {tab === 'form' && (
@@ -3837,7 +3938,7 @@ function BetMarketsPanel({
                 </p>
               </div>
             </div>
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto no-scrollbar">
               <table className="min-w-full text-sm sm:text-base text-gray-100">
                 <tbody>
                   {section.markets.map((mkt, idx) => {
@@ -4344,7 +4445,7 @@ function BetSlipCard({ betslip, stake, totals, onToggleSelection, onStakeChange,
             return (
               <>
                 {/* TOP: scrollable odds list */}
-                <div className="space-y-2 flex-1 min-h-0 overflow-y-auto pr-1 custom-scrollbar-thin mb-2">
+                <div className="space-y-2 flex-1 min-h-0 overflow-y-auto pr-1 no-scrollbar mb-2">
                   {renderedSelections}
                 </div>
 

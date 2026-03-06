@@ -68,3 +68,81 @@ body {
   background-color: #0f172a;
   color: #e2e8f0;
 }
+
+/* Betting page: animated scrollbar (vertical + horizontal) – Standings-style gradient with sparkling end */
+.betting-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(234, 179, 8, 0.6) rgba(255, 255, 255, 0.02);
+}
+.betting-scrollbar::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+@media (max-width: 640px) {
+  .betting-scrollbar::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+}
+.betting-scrollbar::-webkit-scrollbar-track {
+  background: rgba(234, 179, 8, 0.03);
+  border-radius: 10px;
+}
+.betting-scrollbar::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, rgba(234, 179, 8, 0.55) 0%, rgba(34, 211, 238, 0.55) 50%, rgba(234, 179, 8, 0.4) 100%);
+  border-radius: 10px;
+}
+.betting-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, rgba(234, 179, 8, 0.85), rgba(34, 211, 238, 0.85));
+  border-radius: 10px;
+}
+.betting-scrollbar::-webkit-scrollbar-corner {
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: 0 0 10px 0;
+}
+
+/* Gradient border animation (Standings-style) for betting panels */
+@keyframes betting-gradient-border {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+.betting-gradient-border {
+  background: linear-gradient(90deg, rgba(234, 179, 8, 0.5), rgba(34, 211, 238, 0.5), rgba(234, 179, 8, 0.5));
+  background-size: 200% 200%;
+  animation: betting-gradient-border 4s ease infinite;
+}
+
+/* Standings/Ballon d'Or style vertical scrollbar – for Betting probability section (win/draw/loss) */
+.standings-style-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 255, 136, 0.5) rgba(0, 255, 136, 0.02);
+}
+.standings-style-scrollbar::-webkit-scrollbar {
+  width: 10px;
+}
+@media (max-width: 640px) {
+  .standings-style-scrollbar::-webkit-scrollbar {
+    width: 8px;
+  }
+}
+.standings-style-scrollbar::-webkit-scrollbar-track {
+  background: rgba(0, 255, 136, 0.02);
+  border-radius: 10px;
+}
+.standings-style-scrollbar::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, rgba(0, 255, 136, 0.4), rgba(0, 243, 255, 0.4));
+  border-radius: 10px;
+}
+.standings-style-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, rgba(0, 255, 136, 0.8), rgba(0, 243, 255, 0.8));
+}
+
+/* Hide scrollbars but keep scroll behaviour (e.g. Betting page) */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
