@@ -70,16 +70,112 @@ const SocialIcons = {
   ),
 };
 
+const BANANA_FC_BRANDING = ' | Made in Banana FC 🍌';
+const BANANA_FC_SHORT = 'Made in Banana FC 🍌';
+
+/** Build share payload with branding and link (for copy / WhatsApp / Telegram) */
+function buildSharePayload(caption, shareUrl, maxLen = 500) {
+  const base = (caption || 'Check out this clip!').trim();
+  const branded = `${base}${BANANA_FC_BRANDING} ${shareUrl}`;
+  return branded.slice(0, maxLen);
+}
+
+/** Short text for Twitter (280 char limit) and similar */
+function buildShareTextShort(caption, shareUrl) {
+  const base = (caption || 'Check this out!').trim().slice(0, 120);
+  return `${base} ${BANANA_FC_SHORT} ${shareUrl}`.slice(0, 260);
+}
+
+/** Platform share configs – native share (Web Share API) or direct URLs that open the app */
 const SHARE_PLATFORMS = [
-  { id: 'facebook', name: 'Facebook', color: '#1877F2', url: (u, t) => `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(u)}`, Icon: SocialIcons.facebook },
-  { id: 'x', name: 'X (Twitter)', color: '#1DA1F2', url: (u, t) => `https://twitter.com/intent/tweet?url=${encodeURIComponent(u)}&text=${encodeURIComponent(t)}`, Icon: SocialIcons.x },
-  { id: 'whatsapp', name: 'WhatsApp', color: '#25D366', url: (u, t) => `https://wa.me/?text=${encodeURIComponent(t + ' ' + u)}`, Icon: SocialIcons.whatsapp },
-  { id: 'instagram', name: 'Instagram', color: '#E4405F', copyOnly: true, copyMessage: 'Link copied! Paste in Instagram to share', Icon: SocialIcons.instagram },
-  { id: 'tiktok', name: 'TikTok', color: '#EE1D52', copyOnly: true, copyMessage: 'Link copied! Paste in TikTok to share', Icon: SocialIcons.tiktok },
-  { id: 'snapchat', name: 'Snapchat', color: '#FFFC00', copyOnly: true, copyMessage: 'Link copied! Paste in Snapchat to share', Icon: SocialIcons.snapchat },
-  { id: 'linkedin', name: 'LinkedIn', color: '#0A66C2', url: (u, t) => `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(u)}`, Icon: SocialIcons.linkedin },
-  { id: 'telegram', name: 'Telegram', color: '#26A5E4', url: (u, t) => `https://telegram.me/share/url?url=${encodeURIComponent(u)}&text=${encodeURIComponent(t)}`, Icon: SocialIcons.telegram },
-  { id: 'reddit', name: 'Reddit', color: '#FF4500', url: (u, t) => `https://www.reddit.com/submit?url=${encodeURIComponent(u)}&title=${encodeURIComponent(t)}`, Icon: SocialIcons.reddit },
+  {
+    id: 'facebook',
+    name: 'Facebook',
+    color: '#1877F2',
+    Icon: SocialIcons.facebook,
+    nativeShare: true,
+    actions: [
+      { id: 'story', label: 'Share to Story', nativeShare: true, hint: 'Opens share menu → pick Facebook → Add to Story' },
+      { id: 'post', label: 'Post to Feed', url: (u) => `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(u)}` },
+    ],
+  },
+  {
+    id: 'instagram',
+    name: 'Instagram',
+    color: '#E4405F',
+    Icon: SocialIcons.instagram,
+    nativeShare: true,
+    actions: [
+      { id: 'story', label: 'Share to Story', nativeShare: true, hint: 'Opens share menu → pick Instagram → Add to Story' },
+      { id: 'post', label: 'Share to Post/Reel', nativeShare: true, hint: 'Opens share menu → pick Instagram' },
+    ],
+  },
+  {
+    id: 'whatsapp',
+    name: 'WhatsApp',
+    color: '#25D366',
+    Icon: SocialIcons.whatsapp,
+    actions: [
+      { id: 'chat', label: 'Send to Chat', url: (u, t) => `https://wa.me/?text=${encodeURIComponent(buildSharePayload(t, u))}` },
+      { id: 'status', label: 'Share to Status', nativeShare: true, hint: 'Opens share menu → pick WhatsApp → Share to Status' },
+    ],
+  },
+  {
+    id: 'x',
+    name: 'X (Twitter)',
+    color: '#1DA1F2',
+    Icon: SocialIcons.x,
+    actions: [
+      { id: 'tweet', label: 'Post to Feed', url: (u, t) => `https://twitter.com/intent/tweet?url=${encodeURIComponent(u)}&text=${encodeURIComponent(buildShareTextShort(t, u))}` },
+    ],
+  },
+  {
+    id: 'snapchat',
+    name: 'Snapchat',
+    color: '#FFFC00',
+    Icon: SocialIcons.snapchat,
+    nativeShare: true,
+    actions: [
+      { id: 'snap', label: 'Share as Snap', nativeShare: true, hint: 'Opens share menu → pick Snapchat' },
+    ],
+  },
+  {
+    id: 'tiktok',
+    name: 'TikTok',
+    color: '#EE1D52',
+    Icon: SocialIcons.tiktok,
+    nativeShare: true,
+    actions: [
+      { id: 'reel', label: 'Share to TikTok', nativeShare: true, hint: 'Opens share menu → pick TikTok' },
+    ],
+  },
+  {
+    id: 'linkedin',
+    name: 'LinkedIn',
+    color: '#0A66C2',
+    Icon: SocialIcons.linkedin,
+    actions: [
+      { id: 'post', label: 'Post to Feed', url: (u, t) => `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(u)}&summary=${encodeURIComponent((t || '') + BANANA_FC_BRANDING)}` },
+    ],
+  },
+  {
+    id: 'telegram',
+    name: 'Telegram',
+    color: '#26A5E4',
+    Icon: SocialIcons.telegram,
+    actions: [
+      { id: 'chat', label: 'Send to Chat', url: (u, t) => `https://telegram.me/share/url?url=${encodeURIComponent(u)}&text=${encodeURIComponent(buildSharePayload(t, u))}` },
+    ],
+  },
+  {
+    id: 'reddit',
+    name: 'Reddit',
+    color: '#FF4500',
+    Icon: SocialIcons.reddit,
+    actions: [
+      { id: 'submit', label: 'Submit to Feed', url: (u, t) => `https://www.reddit.com/submit?url=${encodeURIComponent(u)}&title=${encodeURIComponent((t || '') + BANANA_FC_BRANDING)}` },
+    ],
+  },
 ];
 
 /** Get video duration from a File (for upload validation) */
@@ -1029,12 +1125,13 @@ function CommentPanel({ postId, onClose, onAddComment, formatDate }) {
   );
 }
 
-/** Share modal – social platforms, with optional share caption synced to DB */
+/** Share modal – platform-specific options (Post, Story, Chat) with Banana FC branding */
 function ShareModal({ post, onClose, onShared }) {
   if (!post) return null;
   const [shareCaption, setShareCaption] = useState(post.shareCaption || post.caption || '');
-  const shareUrl = typeof window !== 'undefined' ? window.location.href + '?insider=' + post.id : '';
-  const shareText = (shareCaption || 'Check out this Insider clip!').slice(0, 160);
+  const [toast, setToast] = useState(null);
+  const shareUrl = typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname}?insider=${post.id}` : '';
+  const shareText = (shareCaption || 'Check out this Insider clip!').trim();
 
   const persistCaption = async (value) => {
     const trimmed = value?.trim() || '';
@@ -1045,33 +1142,96 @@ function ShareModal({ post, onClose, onShared }) {
     }
   };
 
-  const copyLink = (msg = 'Link copied!') => {
+  const showToast = (msg) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 2500);
+  };
+
+  const handleShare = (action) => {
     persistCaption(shareCaption);
     onShared?.(post.id);
-    const payload = shareText ? `${shareText} ${shareUrl}` : shareUrl;
-    navigator.clipboard?.writeText(payload).then(() => alert(msg)).catch(() => {});
   };
+
+  const copyPayload = () => {
+    const payload = buildSharePayload(shareText, shareUrl);
+    navigator.clipboard?.writeText(payload).then(() => showToast('Copied! Paste in your app.')).catch(() => showToast('Copy failed'));
+  };
+
+  const handleNativeShare = async () => {
+    const payload = buildSharePayload(shareText, shareUrl);
+    const shareData = {
+      title: 'Banana FC',
+      text: (shareText || 'Check out this clip!').trim() + BANANA_FC_BRANDING,
+      url: shareUrl,
+    };
+    try {
+      if (navigator.share) {
+        await navigator.share(shareData);
+        handleShare({});
+        showToast('Shared!');
+      } else {
+        copyPayload();
+        handleShare({});
+      }
+    } catch (e) {
+      if (e.name !== 'AbortError') {
+        copyPayload();
+        handleShare({});
+      }
+    }
+  };
+
+  const canNativeShare = typeof navigator !== 'undefined' && navigator.share;
 
   return (
     <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        className="fixed inset-0 z-[1002] flex items-center justify-center bg-black/80 p-4"
-        onClick={onClose}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-[1002] flex items-end sm:items-center justify-center bg-black/85 backdrop-blur-sm p-0 sm:p-4"
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ y: 24, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        exit={{ y: 24, opacity: 0 }}
+        transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+        className="w-full sm:w-auto sm:max-w-sm max-h-[64vh] sm:max-h-[55vh] flex flex-col bg-[#050509]/98 backdrop-blur-xl border border-white/10 rounded-t-3xl sm:rounded-3xl shadow-[0_-10px_40px_rgba(0,0,0,0.5)] sm:shadow-[0_20px_50px_rgba(0,0,0,0.5)] overflow-hidden sm:mb-0 mb-[4.5cm]"
+        onClick={e => e.stopPropagation()}
       >
-        <motion.div
-          initial={{ scale: 0.9, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          exit={{ scale: 0.9, opacity: 0 }}
-          className="bg-[#0a0a0c] border border-yellow-500/30 rounded-3xl p-6 max-w-sm w-full max-h-[85vh] overflow-y-auto"
-          onClick={e => e.stopPropagation()}
-        >
-          <div className="flex justify-between items-center mb-4">
-            <h3 className="font-black uppercase text-white">Share to</h3>
-            <button onClick={onClose} className="p-2 text-gray-500 hover:text-white rounded-lg"><X className="w-5 h-5" /></button>
-          </div>
-          <div className="mb-5">
+        {/* Header */}
+        <div className="flex-shrink-0 flex justify-between items-center px-4 sm:px-6 py-4 border-b border-white/10">
+          <h3 className="font-black uppercase tracking-tight text-white text-base sm:text-lg">
+            Share to
+          </h3>
+          <button
+            onClick={onClose}
+            className="p-2 -mr-2 text-gray-400 hover:text-white rounded-xl hover:bg-white/5 transition-colors"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Scrollable body */}
+        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-4 sm:px-6 py-4 space-y-4">
+          {canNativeShare && (
+            <motion.button
+              onClick={() => {
+                handleShare({});
+                handleNativeShare();
+              }}
+              whileHover={{ scale: 1.01 }}
+              whileTap={{ scale: 0.99 }}
+              className="w-full py-3.5 sm:py-4 rounded-2xl bg-yellow-500 text-black font-black text-xs sm:text-sm uppercase tracking-wider flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(234,179,8,0.3)]"
+            >
+              <Share2 className="w-5 h-5 shrink-0" />
+              <span className="truncate">Share (Story, Post, etc.)</span>
+            </motion.button>
+          )}
+          <p className="text-[10px] sm:text-[11px] text-amber-400/90">
+            All shares include &quot;Made in Banana FC 🍌&quot; + your link
+          </p>
+          <div>
             <label className="block text-[10px] font-black uppercase tracking-[0.18em] text-gray-400 mb-2">
               Caption (optional)
             </label>
@@ -1079,52 +1239,87 @@ function ShareModal({ post, onClose, onShared }) {
               value={shareCaption}
               onChange={(e) => setShareCaption(e.target.value)}
               rows={2}
-              placeholder="Add a message to go with the link..."
-              className="w-full bg-black/40 border border-white/15 rounded-xl px-3 py-2 text-xs text-white placeholder:text-gray-600 focus:outline-none focus:border-yellow-500 resize-none"
+              placeholder="Add a message for your post, story, or reel..."
+              className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2.5 text-xs sm:text-sm text-white placeholder:text-gray-500 focus:outline-none focus:border-yellow-500/60 focus:ring-1 focus:ring-yellow-500/30 resize-none transition-colors"
             />
           </div>
-          <div className="grid grid-cols-3 gap-4">
-            {SHARE_PLATFORMS.map(pf =>
-              pf.copyOnly ? (
-                <motion.button
-                  key={pf.id}
-                  onClick={() => copyLink(pf.copyMessage)}
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  className="flex flex-col items-center gap-2 p-4 rounded-2xl bg-white/5 border border-white/10 hover:border-yellow-500/40 transition-colors"
+
+          {/* Platform grid – 1 col mobile, 2 col desktop */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+            {SHARE_PLATFORMS.map((pf) => (
+              <div
+                key={pf.id}
+                className="rounded-2xl bg-white/[0.04] border border-white/10 overflow-hidden hover:border-white/15 transition-colors"
+              >
+                <div
+                  className="flex items-center gap-2.5 px-3 sm:px-4 py-2.5 border-b border-white/5"
+                  style={{ borderLeft: `3px solid ${pf.color}` }}
                 >
-                  <span style={{ color: pf.color }}><pf.Icon className="w-8 h-8" /></span>
-                  <span className="text-xs font-bold text-white/90">{pf.name}</span>
-                </motion.button>
-              ) : (
-                <motion.a
-                  key={pf.id}
-                  href={pf.url(shareUrl, shareText)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  onClick={() => {
-                    persistCaption(shareCaption);
-                    onShared?.(post.id);
-                  }}
-                  className="flex flex-col items-center gap-2 p-4 rounded-2xl bg-white/5 border border-white/10 hover:border-yellow-500/40 transition-colors"
-                >
-                  <span style={{ color: pf.color }}><pf.Icon className="w-8 h-8" /></span>
-                  <span className="text-xs font-bold text-white/90">{pf.name}</span>
-                </motion.a>
-              )
-            )}
+                  <span style={{ color: pf.color }}><pf.Icon className="w-5 h-5 sm:w-5 sm:h-5 shrink-0" /></span>
+                  <span className="text-xs sm:text-sm font-bold text-white truncate">{pf.name}</span>
+                </div>
+                <div className="p-2.5 sm:p-3 flex flex-wrap gap-2">
+                  {pf.actions.map((action) =>
+                    action.nativeShare ? (
+                      <div key={action.id} className="flex flex-col gap-0.5 min-w-0">
+                        <motion.button
+                          onClick={() => {
+                            handleShare(action);
+                            handleNativeShare();
+                          }}
+                          whileHover={{ scale: 1.02 }}
+                          whileTap={{ scale: 0.98 }}
+                          className="px-3 sm:px-4 py-2 rounded-xl bg-white/5 border border-white/10 hover:border-yellow-500/40 hover:bg-white/10 text-[11px] sm:text-xs font-semibold text-white text-left transition-colors"
+                        >
+                          {action.label}
+                        </motion.button>
+                        {action.hint && (
+                          <span className="text-[9px] text-gray-500 pl-0.5 sm:pl-1">{action.hint}</span>
+                        )}
+                      </div>
+                    ) : action.url ? (
+                      <motion.a
+                        key={action.id}
+                        href={action.url(shareUrl, shareText)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={() => handleShare(action)}
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                        className="px-3 sm:px-4 py-2 rounded-xl bg-white/5 border border-white/10 hover:border-yellow-500/40 hover:bg-white/10 text-[11px] sm:text-xs font-semibold text-white transition-colors"
+                      >
+                        {action.label}
+                      </motion.a>
+                    ) : null
+                  )}
+                </div>
+              </div>
+            ))}
           </div>
+
           <motion.button
-            onClick={copyLink}
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-            className="w-full mt-4 py-3 rounded-xl bg-yellow-500/20 border border-yellow-500/50 text-yellow-500 font-bold text-sm"
+            onClick={() => {
+              handleShare({});
+              copyPayload();
+            }}
+            whileHover={{ scale: 1.01 }}
+            whileTap={{ scale: 0.99 }}
+            className="w-full py-3 rounded-xl bg-yellow-500/15 border border-yellow-500/40 text-yellow-400 font-bold text-xs sm:text-sm hover:bg-yellow-500/25 transition-colors"
           >
-            Copy link
+            Copy link (with caption + Made in Banana FC)
           </motion.button>
-        </motion.div>
+        </div>
+
+        {toast && (
+          <motion.p
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="fixed bottom-24 sm:bottom-8 left-4 right-4 sm:left-1/2 sm:right-auto sm:-translate-x-1/2 px-4 py-2.5 rounded-full bg-yellow-500/95 text-black text-sm font-bold shadow-lg z-[1003] text-center"
+          >
+            {toast}
+          </motion.p>
+        )}
+      </motion.div>
     </motion.div>
   );
 }
