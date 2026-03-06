@@ -92,7 +92,7 @@ export function H2HPanel({ match, state }) {
             {String(m.tournamentType || '').toLowerCase().includes('champions') ? (
               <div className="flex items-center gap-2">
                 <img
-                  src="/assets/leagues/ucl.png"
+                  src="/assets/leagues/ucl.jpg"
                   alt="eChampions League"
                   className="h-6 w-auto rounded-full border border-white/20 bg-white/10"
                 />

@@ -396,7 +396,7 @@ export default function LockerRoom() {
                         <span className={`text-2xl md:text-3xl font-black leading-none tracking-tighter ${isMaxLevel ? 'text-transparent bg-clip-text bg-gradient-to-b from-white to-yellow-200 drop-shadow-[0_0_10px_rgba(255,255,255,0.5)]' : 'text-white'}`}>{stats.ovr}</span>
                         <span className="text-xs md:text-sm font-black text-yellow-500 uppercase tracking-widest leading-none mt-0.5">ST</span>
                         <div className="w-6 h-[1px] bg-yellow-500/50 mt-1 mb-1" />
-                        <img src="/assets/leagues/nepal.png" className="w-4 h-3 md:w-5 md:h-4 object-cover rounded-[1px] opacity-90" alt="Nation" />
+                        <img src="/assets/leagues/nepal.svg" className="w-4 h-3 md:w-5 md:h-4 object-cover rounded-[1px] opacity-90" alt="Nation" />
                       </div>
 
                       {/* CLUB RANK BADGE */}

@@ -1020,7 +1020,7 @@ function getLeagueMeta(tournament) {
 
   if (lower.includes('champions')) {
     return {
-      logo: '/assets/leagues/ucl.png',
+      logo: '/assets/leagues/ucl.jpg',
       short: 'UCL',
       display: 'eChampions League',
     };
@@ -1028,7 +1028,7 @@ function getLeagueMeta(tournament) {
 
   if (lower.includes('laliga') || lower.includes('la liga')) {
     return {
-      logo: '/assets/leagues/laliga.png',
+      logo: '/assets/leagues/laliga.svg',
       short: 'LaLiga',
       display: 'eLaLiga',
     };
@@ -1036,8 +1036,7 @@ function getLeagueMeta(tournament) {
 
   if (lower.includes('premier')) {
     return {
-      // Uses pl.png from public/assets/leagues
-      logo: '/assets/leagues/pl.png',
+      logo: '/assets/leagues/pl.svg',
       short: 'Premier League',
       display: raw,
     };

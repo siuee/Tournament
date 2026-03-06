@@ -55,12 +55,12 @@ export default function MatchDay({ onGoalScored }) {
   };
 
   const leagues = [
-    { name: 'ePremier League', logo: '/assets/leagues/pl.png' },
-    { name: 'eLaLiga', logo: '/assets/leagues/laliga.png' },
-    { name: 'eSerie A', logo: '/assets/leagues/seriea.png' },
-    { name: 'eLigue 1', logo: '/assets/leagues/ligue1.png' },
-    { name: 'eInternational', logo: '/assets/leagues/nepal.png' },
-    { name: 'eChampions League', logo: '/assets/leagues/ucl.png' }
+    { name: 'ePremier League', logo: '/assets/leagues/pl.svg' },
+    { name: 'eLaLiga', logo: '/assets/leagues/laliga.svg' },
+    { name: 'eSerie A', logo: '/assets/leagues/seriea.svg' },
+    { name: 'eLigue 1', logo: '/assets/leagues/ligue1.svg' },
+    { name: 'eInternational', logo: '/assets/leagues/nepal.svg' },
+    { name: 'eChampions League', logo: '/assets/leagues/ucl.jpg' }
   ];
 
   useEffect(() => { fetchData(); }, []);

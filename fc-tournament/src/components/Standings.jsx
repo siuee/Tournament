@@ -15,12 +15,12 @@ export default function Standings() {
   const [gbFormat, setGbFormat] = useState('2v2');
 
   const leagueIcons = {
-    'ePremier League': '/assets/leagues/pl.png',
-    'eLaLiga': '/assets/leagues/laliga.png',
-    'eSerie A': '/assets/leagues/seriea.png',
-    'eLigue 1': '/assets/leagues/ligue1.png',
-    'eInternational': '/assets/leagues/nepal.png',
-    'eChampions League': '/assets/leagues/ucl.png'
+    'ePremier League': '/assets/leagues/pl.svg',
+    'eLaLiga': '/assets/leagues/laliga.svg',
+    'eSerie A': '/assets/leagues/seriea.svg',
+    'eLigue 1': '/assets/leagues/ligue1.svg',
+    'eInternational': '/assets/leagues/nepal.svg',
+    'eChampions League': '/assets/leagues/ucl.jpg'
   };
 
   // HELPER LOGIC: Converts "First Last & First Last" to "First & First" with title case
