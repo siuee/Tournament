@@ -281,6 +281,191 @@ function getRiskFromWin(winAmount, odds) {
   return (w * Math.abs(odds)) / 100;
 }
 
+/**
+ * Ray Hudson–style preview: hyperbolic, poetic, art-infused, with 5+ sentences per fixture.
+ * Uses form, probabilities, 1v1 player names, and fixture hype. Each fixture gets a unique
+ * combination via deterministic hash from fixtureSeed + team names.
+ */
+function generateCommentatorPreview({
+  homeName,
+  awayName,
+  homeForm = '',
+  awayForm = '',
+  homeProb = null,
+  drawProb = null,
+  awayProb = null,
+  is1v1 = false,
+  homePlayersLine = '',
+  awayPlayersLine = '',
+  isFinished = false,
+  viewCount = 0,
+  betCount = 0,
+  fixtureSeed = '',
+}) {
+  const base = `${fixtureSeed}-${homeName}-${awayName}`;
+  const hash = (s) => {
+    let h = 0;
+    for (let i = 0; i < (s || '').length; i++) h = ((h << 5) - h) + (s || '').charCodeAt(i) | 0;
+    return Math.abs(h);
+  };
+  const pick = (arr, salt = '') => arr[hash(base + salt) % (arr.length || 1)];
+  const pickN = (arr, n, salt) => {
+    const out = [];
+    const len = arr.length;
+    if (len === 0 || n <= 0) return out;
+    for (let i = 0; i < n; i++) {
+      out.push(arr[(hash(base + salt + i) + i * 7) % len]);
+    }
+    return [...new Set(out)];
+  };
+
+  const hasForm = (f) => typeof f === 'string' && f.length > 0;
+  const homeW = (homeForm.match(/W/g) || []).length;
+  const awayW = (awayForm.match(/W/g) || []).length;
+  const homeL = (homeForm.match(/L/g) || []).length;
+  const awayL = (awayForm.match(/L/g) || []).length;
+  const homeOnFire = hasForm(homeForm) && homeW >= 3 && homeL === 0;
+  const awayOnFire = hasForm(awayForm) && awayW >= 3 && awayL === 0;
+  const homeStruggling = hasForm(homeForm) && homeL >= 2 && homeW <= 1;
+  const awayStruggling = hasForm(awayForm) && awayL >= 2 && awayW <= 1;
+  const favourite = homeProb != null && awayProb != null
+    ? (homeProb >= awayProb + 15 ? 'home' : awayProb >= homeProb + 15 ? 'away' : null)
+    : null;
+  const drawHeavy = drawProb != null && drawProb >= 32;
+  const bigOccasion = viewCount >= 30 || betCount >= 15;
+
+  const lines = [];
+
+  // Opening – Ray Hudson drama
+  const openings = [
+    `Ohhh, what a fixture we have here! ${homeName} and ${awayName} — the stage is set for something magisterial!`,
+    `Ladies and gentlemen, strap in! When ${homeName} meet ${awayName}, it's poetry in motion waiting to happen.`,
+    `The theatre of Banana FC is calling! ${homeName} versus ${awayName} — this is the kind of football that makes your soul sing.`,
+    `Here we go! ${homeName} and ${awayName} — two sides ready to paint this pitch with their artistry.`,
+    `What a collision we have in store! ${homeName} against ${awayName} — this is football at its most delicious.`,
+  ];
+  lines.push(pick(openings, 'op'));
+
+  // Form/stats – Ray Hudson on momentum
+  if (homeOnFire && !awayOnFire) {
+    const fire = [
+      `${homeName} arrive in red-hot form — ${homeForm} — and they're onto it like Dracula with a plate of liver!`,
+      `Form? ${homeName} have got it in spades: ${homeForm}. The momentum is absolutely delicious.`,
+      `Look at ${homeName}: ${homeForm}. They're flying in with the coolness of a Greyhound's nose!`,
+    ];
+    lines.push(pick(fire, 'hf'));
+  } else if (awayOnFire && !homeOnFire) {
+    const fire = [
+      `${awayName} are on fire — ${awayForm} — and they'll fear no one. Pure poetry!`,
+      `It's ${awayName} with the form: ${awayForm}. A terabyte of skill waiting to explode!`,
+      `${awayName} arrive in blistering form: ${awayForm}. ${homeName} must be ready for the maestro.`,
+    ];
+    lines.push(pick(fire, 'af'));
+  } else if (homeStruggling && awayStruggling) {
+    lines.push(pick([
+      "Two sides searching for a spark. Something has to give — and when it does, it'll be magisterial!",
+      'Neither has had it easy of late. A chance for one to turn the tide and write their own legend.',
+    ], 'both'));
+  } else if (homeStruggling) {
+    lines.push(pick([
+      `${homeName} will look to turn the tide after a difficult run. The character test awaits — and character is what separates the greats.`,
+      `${homeName} need a result here. When the chips are down, that's when the artists emerge.`,
+    ], 'hs'));
+  } else if (awayStruggling) {
+    lines.push(pick([
+      `${awayName} will be desperate to stop the rot. Desperation can breed genius on the pitch!`,
+      `${awayName} need to find their spark again. This is the stage. The stage where legends are made.`,
+    ], 'as'));
+  } else if (hasForm(homeForm) || hasForm(awayForm)) {
+    lines.push(pick([
+      `Form tells a story: ${homeForm} for ${homeName}, ${awayForm} for ${awayName}. Two narratives about to collide.`,
+      `Recent form: ${homeName} ${homeForm || '—'} ${awayName} ${awayForm || '—'}. The stage is set for the artists to shine.`,
+    ], 'form'));
+
+  }
+
+  // 1v1 duel – Ray Hudson on individual battles
+  if (is1v1 && homePlayersLine && awayPlayersLine) {
+    const duel = [
+      `One on one. No hiding. ${homePlayersLine} versus ${awayPlayersLine} — man against man, like a ballet dancer against a bull!`,
+      `A duel for the ages: ${homePlayersLine} against ${awayPlayersLine}. The maestro meets the magician. This is personal!`,
+      `When ${homePlayersLine} meets ${awayPlayersLine}, it's not just a match — it's a statement. Two artists with a football at their feet.`,
+    ];
+    lines.push(pick(duel, 'duel'));
+  }
+
+  // Probability / odds – Ray Hudson flair
+  if (favourite === 'home' && homeProb != null) {
+    lines.push(pick([
+      `The numbers favour ${homeName} — but the pitch writes its own script. Football, like a Picasso, loves to surprise.`,
+      `All the stats point one way. But football, the beautiful game, loves an underdog. It's what makes it sublime!`,
+    ], 'fav'));
+  } else if (favourite === 'away' && awayProb != null) {
+    lines.push(pick([
+      `The book says ${awayName}. The game says: we shall see. And that's the beauty of it!`,
+      `Form and probability lean towards ${awayName}. But nothing is given. Nothing! This is football, not maths.`,
+    ], 'fav'));
+  } else if (favourite === null && (homeProb != null || drawProb != null)) {
+    lines.push(pick([
+      'Too close to call. The finest of margins. A single moment of genius could decide everything — magisterial!',
+      "Nothing in it. Nothing! A single moment could decide everything. That's the poetry of the game.",
+      'Evenly matched. This one could go any which way. Like a Mozart symphony — unpredictable, breathtaking.',
+    ], 'even'));
+  }
+
+  if (drawHeavy) {
+    lines.push(pick([
+      'The draw lurks in every shadow of this one. A share of the spoils would surprise no one — and sometimes a draw is a work of art.',
+      'A share of the spoils would surprise no one. Two sides cancelling each other out in the most beautiful way.',
+    ], 'draw'));
+  }
+
+  // Ray Hudson signature – artistry, hyperbole
+  const artistry = [
+    'The stage is set for moments of pure genius. The kind that make you stand up and applaud.',
+    'This is football as art. The pitch is the canvas, the ball is the brush. Expect the sublime.',
+    "When the beautiful game meets the beautiful game, anything can happen. That's the magic.",
+    'We could see moments of magic here. The kind that belong in a museum — or a highlight reel forever.',
+    'Like watching a Picasso painting come to life. Every touch, every pass — a stroke of genius.',
+  ];
+  lines.push(...pickN(artistry, 2, 'art'));
+
+  if (bigOccasion) {
+    lines.push(pick([
+      'The eyes of Banana FC are upon this one. A fixture that has captured the imagination. Magnificent!',
+      "This is the one everyone's been talking about. The build-up has been delicious — now for the main course.",
+    ], 'big'));
+  }
+
+  // Closing – Ray Hudson crescendo
+  const closings = [
+    'The pitch will decide. Ninety minutes to write the story. Let the artists paint!',
+    'Expect drama. Expect genius. This is why we watch. This is football!',
+    'Let the game begin. And may the best artist win. Magisterial!',
+    'Ninety minutes to write the story. The kind of story that gets told for years. Here we go!',
+  ];
+  if (!isFinished) lines.push(pick(closings, 'close'));
+
+  // Ensure at least 5 sentences – pad with more Ray Hudson flair if needed
+  const extra = [
+    `${homeName} and ${awayName} — two sides ready to paint this pitch with moments of pure genius.`,
+    'This is the beautiful game at its finest. Expect the unexpected. Expect the sublime.',
+    'When talent meets talent, magic happens. That is the promise of this fixture.',
+    'The kind of fixture that separates the good from the great. Magisterial!',
+    'Football as art. The pitch as canvas. Let the artists show us what they have.',
+  ];
+  const seen = new Set(lines);
+  for (let i = 0; lines.length < 5 && i < extra.length * 2; i++) {
+    const s = extra[hash(base + 'pad' + i) % extra.length];
+    if (!seen.has(s)) {
+      seen.add(s);
+      lines.push(s);
+    }
+  }
+
+  return lines.slice(0, 8);
+}
+
 // Poisson PMF: P(X = k) for lambda
 function poissonPmf(k, lambda) {
   if (lambda <= 0) return k === 0 ? 1 : 0;
@@ -2525,6 +2710,42 @@ function MatchDetailView({
   const homePlayersLine = formatPlayerLine(match.homeTeamObj);
   const awayPlayersLine = formatPlayerLine(match.awayTeamObj);
 
+  const commentatorLines = useMemo(
+    () =>
+      generateCommentatorPreview({
+        homeName: match?.home || 'Home',
+        awayName: match?.away || 'Away',
+        homeForm,
+        awayForm,
+        homeProb: probabilities?.home ?? null,
+        drawProb: probabilities?.draw ?? null,
+        awayProb: probabilities?.away ?? null,
+        is1v1: is1v1Match,
+        homePlayersLine: homePlayersLine || '',
+        awayPlayersLine: awayPlayersLine || '',
+        isFinished,
+        viewCount: fixtureStats?.viewCount ?? 0,
+        betCount: fixtureStats?.betCount ?? 0,
+        fixtureSeed: fixtureId || '',
+      }),
+    [
+      match?.home,
+      match?.away,
+      homeForm,
+      awayForm,
+      probabilities?.home,
+      probabilities?.draw,
+      probabilities?.away,
+      is1v1Match,
+      homePlayersLine,
+      awayPlayersLine,
+      isFinished,
+      fixtureStats?.viewCount,
+      fixtureStats?.betCount,
+      fixtureId,
+    ]
+  );
+
   // If match is finished and user was on Bet tab, switch to Bets placed
   useEffect(() => {
     if (isFinished && tab === 'bet') setTab('bets-placed');
@@ -2632,16 +2853,23 @@ function MatchDetailView({
             className="space-y-4 text-sm sm:text-base"
           >
             <div className="rounded-2xl border border-white/10 bg-[#050509]/95 p-4 text-current text-gray-200">
-              <p className="font-semibold text-sm sm:text-base mb-2">
-                Preview for <span className="text-yellow-300">{match.home}</span> vs{' '}
-                <span className="text-yellow-300">{match.away}</span>
-              </p>
-              <p className="text-xs sm:text-sm text-gray-400 leading-relaxed mb-4">
-                This is a fun-only Banana FC matchup. Use the tabs above to explore win probabilities,
-                recent form, head-to-head meetings, and betting-style odds. No real money, no prizes –
-                just hype for the fixture.
-              </p>
-
+              {/* Commentator-style preview lines (Drury/Hudson vibe) */}
+              {Array.isArray(commentatorLines) && commentatorLines.length > 0 && (
+                <div className="mb-4 pb-4 border-b border-white/10">
+                  <p className="text-[10px] uppercase tracking-[0.25em] text-amber-400/90 font-semibold mb-2">
+                    The build-up
+                  </p>
+                  {commentatorLines.map((line, i) => (
+                    <p
+                      key={i}
+                      className="text-sm sm:text-base text-gray-200 leading-relaxed italic"
+                      style={{ fontFamily: 'Georgia, "Times New Roman", serif' }}
+                    >
+                      “{line}”
+                    </p>
+                  ))}
+                </div>
+              )}
               {/* View count + trending/hot */}
               <div className="flex flex-wrap items-center gap-2 mb-4">
                 <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/5 border border-white/10 text-[11px] font-semibold text-gray-300">
