@@ -20,8 +20,7 @@ import {
 } from 'lucide-react';
 import { db } from '../firebase';
 import { collection, getDocs, getDoc, doc, setDoc, updateDoc, addDoc, increment, query, orderBy, limit, onSnapshot } from 'firebase/firestore';
-import { formatMatchHistoryTeam, formatMatchDateTime, matchTeamToMatch } from '../lib/utils';
-import { formatCountShort } from '../lib/utils';
+import { formatMatchHistoryTeam, formatMatchDateTime, matchTeamToMatch, toTitleCase, formatCountShort } from '../lib/utils';
 import { ProbabilityPanel, FormPanel } from './BettingExtras';
 import { H2HPanel } from './BettingH2H';
 import {
@@ -2087,6 +2086,10 @@ export default function Betting() {
               const played = detailMatch && detailTournament ? findPlayedMatchForFixture(detailMatch, detailTournament, playedMatches) : null;
               return played != null ? { homeScore: played.homeScore, awayScore: played.awayScore } : null;
             })()}
+            finishedMatch={(() => {
+              const played = detailMatch && detailTournament ? findPlayedMatchForFixture(detailMatch, detailTournament, playedMatches) : null;
+              return played != null ? played : null;
+            })()}
             tab={detailTab}
             setTab={setDetailTab}
             formState={formState}
@@ -2418,6 +2421,43 @@ function MatchRow({ match, finishedMatch, onOpen }) {
   const homePlayers = !is1v1 && !is2v2 ? formatPlayersLine(homePlayersArr) : '';
   const awayPlayers = !is1v1 && !is2v2 ? formatPlayersLine(awayPlayersArr) : '';
 
+  // Goal scorer lines (after result is posted), similar to Match Day history styling
+  let homeScorers = [];
+  let awayScorers = [];
+
+  if (isFinished && finishedMatch) {
+    const homeTeamObj = match.homeTeamObj;
+    const awayTeamObj = match.awayTeamObj;
+
+    let homeGoalsArr = finishedMatch.homePlayerGoals || [];
+    let awayGoalsArr = finishedMatch.awayPlayerGoals || [];
+
+    // Fallbacks for older matches without explicit per-player goals
+    if ((!homeGoalsArr || homeGoalsArr.length === 0) && homeTeamObj?.playerData?.length) {
+      homeGoalsArr = homeTeamObj.playerData.map((p) => ({
+        name: p.name,
+        goals: homeTeamObj.playerData.length === 1 ? homeScore : undefined,
+      }));
+    }
+    if ((!awayGoalsArr || awayGoalsArr.length === 0) && awayTeamObj?.playerData?.length) {
+      awayGoalsArr = awayTeamObj.playerData.map((p) => ({
+        name: p.name,
+        goals: awayTeamObj.playerData.length === 1 ? awayScore : undefined,
+      }));
+    }
+
+    const normalize = (arr) =>
+      (arr || [])
+        .filter((p) => p && p.name && p.goals != null && Number(p.goals) > 0)
+        .map((p) => ({
+          name: p.name,
+          goals: Number(p.goals),
+        }));
+
+    homeScorers = normalize(homeGoalsArr);
+    awayScorers = normalize(awayGoalsArr);
+  }
+
   return (
     <button
       className="w-full px-4 sm:px-6 py-3 flex items-center justify-between text-sm text-gray-100 hover:bg-white/5 transition-colors"
@@ -2448,6 +2488,22 @@ function MatchRow({ match, finishedMatch, onOpen }) {
             <span className="mt-0.5 text-[10px] text-gray-500 truncate">
               {homePlayers}
             </span>
+          )}
+          {isFinished && homeScorers.length > 0 && (
+            <div className="mt-0.5 flex flex-col gap-y-0.5 text-[9px] text-gray-400">
+              {homeScorers.map((p, i) => (
+                <span key={i} className="inline-flex items-center gap-1">
+                  <span className="text-amber-300 font-semibold">
+                    {toTitleCase(p.name?.split(' ')[0] || p.name || '')}
+                  </span>
+                  <span className="text-amber-300/80">×</span>
+                  <span className="text-[10px] leading-none" title="Goals">
+                    ⚽
+                  </span>
+                  <span className="text-amber-100 font-black">{p.goals}</span>
+                </span>
+              ))}
+            </div>
           )}
         </span>
         <span className="text-[11px] uppercase tracking-[0.18em] text-gray-500 flex flex-col items-center gap-0.5">
@@ -2481,6 +2537,22 @@ function MatchRow({ match, finishedMatch, onOpen }) {
               {awayPlayers}
             </span>
           )}
+          {isFinished && awayScorers.length > 0 && (
+            <div className="mt-0.5 flex flex-col gap-y-0.5 text-[9px] text-gray-400">
+              {awayScorers.map((p, i) => (
+                <span key={i} className="inline-flex items-center gap-1">
+                  <span className="text-amber-300 font-semibold">
+                    {toTitleCase(p.name?.split(' ')[0] || p.name || '')}
+                  </span>
+                  <span className="text-amber-300/80">×</span>
+                  <span className="text-[10px] leading-none" title="Goals">
+                    ⚽
+                  </span>
+                  <span className="text-amber-100 font-black">{p.goals}</span>
+                </span>
+              ))}
+            </div>
+          )}
         </span>
       </span>
       <span className="ml-3 text-[11px] text-gray-500 hidden sm:inline">
@@ -2495,6 +2567,7 @@ function MatchDetailView({
   tournament,
   isFinished = false,
   result = null,
+  finishedMatch = null,
   tab,
   setTab,
   onBack,
@@ -2710,6 +2783,43 @@ function MatchDetailView({
   const homePlayersLine = formatPlayerLine(match.homeTeamObj);
   const awayPlayersLine = formatPlayerLine(match.awayTeamObj);
 
+  // Goal scorers for header (when finished), similar style to Match Day history and betting list
+  let homeScorers = [];
+  let awayScorers = [];
+
+  if (isFinished && finishedMatch) {
+    const homeTeamObj = match.homeTeamObj;
+    const awayTeamObj = match.awayTeamObj;
+
+    let homeGoalsArr = finishedMatch.homePlayerGoals || [];
+    let awayGoalsArr = finishedMatch.awayPlayerGoals || [];
+
+    // Fallbacks for matches without explicit per-player goals
+    if ((!homeGoalsArr || homeGoalsArr.length === 0) && homeTeamObj?.playerData?.length) {
+      homeGoalsArr = homeTeamObj.playerData.map((p) => ({
+        name: p.name,
+        goals: homeTeamObj.playerData.length === 1 ? (result?.homeScore ?? null) : undefined,
+      }));
+    }
+    if ((!awayGoalsArr || awayGoalsArr.length === 0) && awayTeamObj?.playerData?.length) {
+      awayGoalsArr = awayTeamObj.playerData.map((p) => ({
+        name: p.name,
+        goals: awayTeamObj.playerData.length === 1 ? (result?.awayScore ?? null) : undefined,
+      }));
+    }
+
+    const normalize = (arr) =>
+      (arr || [])
+        .filter((p) => p && p.name && p.goals != null && Number(p.goals) > 0)
+        .map((p) => ({
+          name: p.name,
+          goals: Number(p.goals),
+        }));
+
+    homeScorers = normalize(homeGoalsArr);
+    awayScorers = normalize(awayGoalsArr);
+  }
+
   const commentatorLines = useMemo(
     () =>
       generateCommentatorPreview({
@@ -2757,10 +2867,10 @@ function MatchDetailView({
       <div className="relative p-[1px] rounded-3xl betting-gradient-border shadow-[0_0_32px_rgba(0,0,0,0.7)]">
         <div className="rounded-3xl bg-[#050509]/95 px-4 sm:px-6 py-4 border border-white/5">
         <div className="flex items-center justify-between gap-3 text-xs text-gray-400 mb-3">
-          <button
+        <button
             type="button"
             onClick={onBack}
-            className="flex items-center gap-1 text-[11px] text-gray-300 hover:text-white"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-[0.22em] bg-gradient-to-r from-amber-400 via-yellow-300 to-amber-500 text-black shadow-[0_0_22px_rgba(250,204,21,0.9)] border border-yellow-400/80 hover:from-yellow-300 hover:via-amber-200 hover:to-yellow-400 hover:shadow-[0_0_30px_rgba(250,204,21,1)] transition-all"
           >
             <ChevronLeft className="w-3 h-3" />
             <span>Back to schedule</span>
@@ -2800,6 +2910,22 @@ function MatchDetailView({
                 {homePlayersLine}
               </span>
             )}
+            {isFinished && homeScorers.length > 0 && (
+              <div className="mt-0.5 flex flex-col gap-y-0.5 text-[9px] sm:text-[10px] text-gray-400">
+                {homeScorers.map((p, i) => (
+                  <span key={i} className="inline-flex items-center gap-1">
+                    <span className="text-amber-300 font-semibold">
+                      {toTitleCase(p.name?.split(' ')[0] || p.name || '')}
+                    </span>
+                    <span className="text-amber-300/80">×</span>
+                    <span className="text-[10px] leading-none" title="Goals">
+                      ⚽
+                    </span>
+                    <span className="text-amber-100 font-black">{p.goals}</span>
+                  </span>
+                ))}
+              </div>
+            )}
           </span>
           <span className="text-lg sm:text-2xl font-black text-white flex flex-col items-center gap-0.5">
             {scoreLabel != null ? (
@@ -2819,6 +2945,22 @@ function MatchDetailView({
               <span className="mt-0.5 text-[10px] text-gray-500 truncate max-w-full">
                 {awayPlayersLine}
               </span>
+            )}
+            {isFinished && awayScorers.length > 0 && (
+              <div className="mt-0.5 flex flex-col gap-y-0.5 text-[9px] sm:text-[10px] text-gray-400">
+                {awayScorers.map((p, i) => (
+                  <span key={i} className="inline-flex items-center gap-1">
+                    <span className="text-amber-300 font-semibold">
+                      {toTitleCase(p.name?.split(' ')[0] || p.name || '')}
+                    </span>
+                    <span className="text-amber-300/80">×</span>
+                    <span className="text-[10px] leading-none" title="Goals">
+                      ⚽
+                    </span>
+                    <span className="text-amber-100 font-black">{p.goals}</span>
+                  </span>
+                ))}
+              </div>
             )}
           </span>
         </div>
@@ -4477,20 +4619,20 @@ function BetSlipCard({ betslip, stake, totals, onToggleSelection, onStakeChange,
   };
 
   return (
-    <div className="rounded-2xl bg-gradient-to-br from-[#020617] via-[#020617] to-[#0f172a] shadow-[0_0_45px_rgba(34,211,238,0.45)] p-3 relative overflow-hidden flex flex-col w-full h-[65vh] sm:h-[430px] md:h-[460px] text-xs font-sans">
-      <div className="pointer-events-none absolute inset-0 opacity-40 bg-[radial-gradient(circle_at_top,_rgba(56,189,248,0.45),transparent_55%),radial-gradient(circle_at_bottom,_rgba(244,63,94,0.45),transparent_55%)]" />
+    <div className="rounded-2xl bg-gradient-to-br from-amber-500 via-yellow-400 to-amber-600 shadow-[0_0_55px_rgba(250,204,21,0.9)] p-3 relative overflow-hidden flex flex-col w-full h-[65vh] sm:h-[430px] md:h-[460px] text-xs font-sans border border-yellow-300/80">
+      <div className="pointer-events-none absolute inset-0 opacity-40 bg-[radial-gradient(circle_at_top,_rgba(250,250,250,0.45),transparent_55%),radial-gradient(circle_at_bottom,_rgba(253,186,116,0.6),transparent_55%)]" />
       <div className="relative flex flex-col flex-1 min-h-0">
         <div className="flex items-center justify-between mb-2 flex-shrink-0">
           <div className="flex items-center gap-1.5">
             <div className="relative">
-              <div className="absolute inset-0 blur-md bg-cyan-400/60 rounded-full" />
-              <Coins className="relative w-4 h-4 text-cyan-200 drop-shadow-[0_0_12px_rgba(34,211,238,0.9)]" />
+              <div className="absolute inset-0 blur-md bg-white/80 rounded-full" />
+              <Coins className="relative w-4 h-4 text-amber-900 drop-shadow-[0_0_12px_rgba(251,191,36,1)]" />
             </div>
             <div>
-              <h3 className="text-sm font-black uppercase tracking-wider text-cyan-100 drop-shadow-[0_0_10px_rgba(34,211,238,0.9)]">
+              <h3 className="text-sm font-black uppercase tracking-wider text-slate-900 drop-shadow-[0_0_10px_rgba(250,250,249,0.9)]">
                 Bet Slip
               </h3>
-              <p className="text-[10px] text-cyan-300/80 uppercase tracking-wider">
+              <p className="text-[10px] text-amber-900/80 uppercase tracking-wider">
                 Fun only
               </p>
             </div>
