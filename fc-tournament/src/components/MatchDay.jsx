@@ -390,10 +390,10 @@ export default function MatchDay({ onGoalScored }) {
             
             <div className="flex justify-between items-start mb-8 relative z-10">
               <div>
-                <h3 className="text-2xl sm:text-3xl font-black italic uppercase tracking-tighter leading-none text-white drop-shadow-md">
-                  <span className="text-yellow-500 lowercase italic font-black mr-1">e</span>{t.type.replace(/^e/, '')}
+                <h3 className="text-2xl sm:text-3xl font-black italic tracking-tighter uppercase leading-none text-transparent bg-clip-text bg-gradient-to-r from-neonBlue to-[#00ff88] pr-2">
+                  <span className="text-neonBlue lowercase italic font-black mr-1">e</span>{t.type.replace(/^e/, '')}
                 </h3>
-                <span className="inline-block mt-2 text-[9px] font-black uppercase tracking-widest bg-yellow-500/10 text-yellow-500 px-2 py-1 rounded border border-yellow-500/20">{t.format}</span>
+                <span className="inline-block mt-2 text-[9px] font-black uppercase tracking-widest bg-[#00ff88]/10 text-[#00ff88] px-2 py-1 rounded border border-[#00ff88]/20">{t.format}</span>
                 
                 {/* Action Buttons - Left side, away from logo */}
                 <div className="flex flex-wrap gap-2 mt-5">

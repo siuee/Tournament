@@ -2967,20 +2967,54 @@ function MatchDetailView({
 
         {/* Tabs */}
         <div className="mt-3 border-t border-white/10 pt-3 flex flex-wrap items-center gap-2 text-[11px]">
-          {tabs.map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              onClick={() => setTab(t.id)}
-              className={`px-3 py-1.5 rounded-full border text-[10px] font-semibold tracking-[0.18em] uppercase ${
-                tab === t.id
-                  ? 'border-yellow-400 bg-yellow-500/20 text-yellow-100'
-                  : 'border-white/10 bg-white/5 text-gray-300 hover:border-yellow-400/70 hover:text-yellow-100'
-              }`}
-            >
-              {t.label}
-            </button>
-          ))}
+          {tabs.map((t) => {
+            const isActive = tab === t.id;
+            let activeClasses = '';
+            let inactiveClasses = 'border-white/10 bg-white/5 text-gray-300 hover:border-white/40 hover:bg-white/10 hover:text-white';
+
+            switch (t.id) {
+              case 'preview':
+                activeClasses =
+                  'border-amber-400 bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-500 text-black shadow-[0_0_18px_rgba(250,204,21,0.8)]';
+                break;
+              case 'probability':
+                activeClasses =
+                  'border-cyan-400 bg-gradient-to-r from-cyan-500 via-sky-400 to-cyan-500 text-slate-900 shadow-[0_0_20px_rgba(34,211,238,0.8)]';
+                break;
+              case 'form':
+                activeClasses =
+                  'border-emerald-400 bg-gradient-to-r from-emerald-500 via-lime-400 to-emerald-500 text-black shadow-[0_0_18px_rgba(52,211,153,0.8)]';
+                break;
+              case 'h2h':
+                activeClasses =
+                  'border-fuchsia-400 bg-gradient-to-r from-fuchsia-500 via-pink-400 to-fuchsia-500 text-white shadow-[0_0_18px_rgba(244,114,182,0.9)]';
+                break;
+              case 'bet':
+                activeClasses =
+                  'border-yellow-400 bg-gradient-to-r from-yellow-400 via-amber-300 to-yellow-400 text-slate-900 shadow-[0_0_22px_rgba(250,204,21,1)]';
+                break;
+              case 'bets-placed':
+                activeClasses =
+                  'border-indigo-400 bg-gradient-to-r from-indigo-500 via-violet-500 to-indigo-600 text-white shadow-[0_0_22px_rgba(129,140,248,0.9)]';
+                break;
+              default:
+                activeClasses =
+                  'border-yellow-400 bg-yellow-500/20 text-yellow-100 shadow-[0_0_14px_rgba(250,204,21,0.6)]';
+            }
+
+            return (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => setTab(t.id)}
+                className={`px-3 py-1.5 rounded-full border text-[10px] font-black tracking-[0.22em] uppercase transition-all ${
+                  isActive ? activeClasses : inactiveClasses
+                }`}
+              >
+                {t.label}
+              </button>
+            );
+          })}
         </div>
         </div>
       </div>
@@ -4619,20 +4653,20 @@ function BetSlipCard({ betslip, stake, totals, onToggleSelection, onStakeChange,
   };
 
   return (
-    <div className="rounded-2xl bg-gradient-to-br from-amber-500 via-yellow-400 to-amber-600 shadow-[0_0_55px_rgba(250,204,21,0.9)] p-3 relative overflow-hidden flex flex-col w-full h-[65vh] sm:h-[430px] md:h-[460px] text-xs font-sans border border-yellow-300/80">
-      <div className="pointer-events-none absolute inset-0 opacity-40 bg-[radial-gradient(circle_at_top,_rgba(250,250,250,0.45),transparent_55%),radial-gradient(circle_at_bottom,_rgba(253,186,116,0.6),transparent_55%)]" />
+    <div className="rounded-2xl bg-gradient-to-br from-[#020617] via-[#020617] to-[#0f172a] shadow-[0_0_45px_rgba(34,211,238,0.45)] p-3 relative overflow-hidden flex flex-col w-full h-[65vh] sm:h-[430px] md:h-[460px] text-xs font-sans border border-cyan-500/40">
+      <div className="pointer-events-none absolute inset-0 opacity-40 bg-[radial-gradient(circle_at_top,_rgba(56,189,248,0.45),transparent_55%),radial-gradient(circle_at_bottom,_rgba(244,63,94,0.45),transparent_55%)]" />
       <div className="relative flex flex-col flex-1 min-h-0">
         <div className="flex items-center justify-between mb-2 flex-shrink-0">
           <div className="flex items-center gap-1.5">
             <div className="relative">
-              <div className="absolute inset-0 blur-md bg-white/80 rounded-full" />
-              <Coins className="relative w-4 h-4 text-amber-900 drop-shadow-[0_0_12px_rgba(251,191,36,1)]" />
+              <div className="absolute inset-0 blur-md bg-cyan-400/60 rounded-full" />
+              <Coins className="relative w-4 h-4 text-cyan-200 drop-shadow-[0_0_12px_rgba(34,211,238,0.9)]" />
             </div>
             <div>
-              <h3 className="text-sm font-black uppercase tracking-wider text-slate-900 drop-shadow-[0_0_10px_rgba(250,250,249,0.9)]">
+              <h3 className="text-sm font-black uppercase tracking-wider text-cyan-100 drop-shadow-[0_0_10px_rgba(34,211,238,0.9)]">
                 Bet Slip
               </h3>
-              <p className="text-[10px] text-amber-900/80 uppercase tracking-wider">
+              <p className="text-[10px] text-cyan-300/80 uppercase tracking-wider">
                 Fun only
               </p>
             </div>
