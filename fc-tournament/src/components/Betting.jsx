@@ -2319,7 +2319,7 @@ export default function Betting() {
                               matchTeamToMatch(f.homeTeamObj, playedMatch, 'home') &&
                               matchTeamToMatch(f.awayTeamObj, playedMatch, 'away')
                           );
-                          const matchForRow = fixture ?? {
+                          const baseMatch = fixture ?? {
                             id: playedMatch.id,
                             home: teamLabel(homeTeamObj),
                             away: teamLabel(awayTeamObj),
@@ -2327,6 +2327,11 @@ export default function Betting() {
                             awayTeamObj,
                             kickoff: playedMatch.createdAt?.toDate?.() ?? playedMatch.createdAt ?? selectedDate,
                             matchNumber: playedMatch.matchNumber,
+                          };
+                          // Use canonical fixture ID (matches where bets are stored) when we have a played match
+                          const matchForRow = {
+                            ...baseMatch,
+                            id: getFixtureIdFromPlayedMatch(playedMatch, t) || baseMatch.id,
                           };
                           return (
                             <MatchRow
