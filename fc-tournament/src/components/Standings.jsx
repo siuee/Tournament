@@ -57,12 +57,14 @@ export default function Standings() {
         const leagueGroups = {};
         const leagueFinished = {}; // groupKey -> true if at least one tournament in this league has ended (duration passed)
 
-        tSnap.docs.forEach(doc => {
-          const data = doc.data();
+        tSnap.docs.forEach(docRef => {
+          const data = docRef.data();
+          const tournamentId = docRef.id;
           const type = data.type || 'Other Leagues';
           const format = data.format || '2v2';
           
-          const groupKey = `${type}_${format}`;
+          // One standings table per tournament (unique data per league instance)
+          const groupKey = tournamentId;
           if (!leagueGroups[groupKey]) leagueGroups[groupKey] = [];
 
           const durationDays = Number(data.durationDays);
@@ -74,29 +76,38 @@ export default function Standings() {
             if (endDate.getTime() <= Date.now()) leagueFinished[groupKey] = true;
           }
 
-          if (data.teams) {
-            data.teams.forEach(team => {
-              const teamMatches = matchHistory.filter(m =>
-                m.tournamentType === type && (matchTeamToMatch(team, m, 'home') || matchTeamToMatch(team, m, 'away'))
-              );
+          const tournamentTeams = data.teams || [];
+          if (tournamentTeams.length > 0) {
+            tournamentTeams.forEach(team => {
+              // Only include matches from THIS tournament (by tournamentId or legacy: both teams in this tournament)
+              // Use tournament document as source of truth (same as MatchDay): pts, totalGoals
+              const pts = Number(team.pts) || 0;
+              const gs = Number(team.totalGoals) || 0;
 
-              let w = 0, d = 0, l = 0, gs = 0, gc = 0, form = [];
+              const teamMatches = matchHistory.filter(m => {
+                if (!(matchTeamToMatch(team, m, 'home') || matchTeamToMatch(team, m, 'away'))) return false;
+                if (m.tournamentId) return m.tournamentId === tournamentId;
+                const homeInThis = tournamentTeams.some(t => matchTeamToMatch(t, m, 'home'));
+                const awayInThis = tournamentTeams.some(t => matchTeamToMatch(t, m, 'away'));
+                return homeInThis && awayInThis;
+              });
+
+              let w = 0, d = 0, l = 0, gc = 0, form = [];
               const sortedMatches = [...teamMatches].sort((a, b) => getSafeTime(b.createdAt) - getSafeTime(a.createdAt));
 
               sortedMatches.forEach((m, idx) => {
                 const isHome = matchTeamToMatch(team, m, 'home');
                 const tS = isHome ? (Number(m.homeScore) || 0) : (Number(m.awayScore) || 0);
                 const oS = isHome ? (Number(m.awayScore) || 0) : (Number(m.homeScore) || 0);
-                
-                gs += tS; gc += oS;
+                gc += oS;
                 const res = tS > oS ? 'W' : tS === oS ? 'D' : 'L';
                 if (res === 'W') w++; else if (res === 'D') d++; else l++;
                 if (idx < 5) form.push(res);
               });
 
-              const pts = 3 * w + d;
+              const gd = gs - gc;
               leagueGroups[groupKey].push({
-                ...team, mp: teamMatches.length, w, d, l, gs, gc, gd: gs - gc, pts, form, format, type 
+                ...team, mp: teamMatches.length, w, d, l, gs, gc, gd, pts, form, format, type 
               });
 
               if (team.playerData) {

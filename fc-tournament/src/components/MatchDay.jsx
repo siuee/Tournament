@@ -777,25 +777,27 @@ export default function MatchDay({ onGoalScored }) {
             )}
           </AnimatePresence>
 
-          {/* RECORD MATCH SCORE MODAL */}
+          {/* RECORD MATCH SCORE MODAL - Compact, no scroll, submit always visible */}
           <AnimatePresence>
             {showMatchModal && (
-              <div className="fixed inset-0 flex items-center justify-center bg-black/90 backdrop-blur-md p-4">
+              <div className="fixed inset-0 flex items-center justify-center bg-black/90 backdrop-blur-md p-3 sm:p-4 z-[99999]">
                 <motion.div
                   initial={getClickOriginVariant()}
                   animate={{ scale: 1, opacity: 1, x: 0, y: 0 }}
                   exit={getClickOriginVariant()}
                   transition={{ type: "spring", stiffness: 350, damping: 28 }}
-                  className="bg-[#0a0a0c] border border-yellow-500/30 w-full max-w-2xl p-6 sm:p-10 rounded-[30px] sm:rounded-[40px] relative shadow-[0_0_50px_rgba(234,179,8,0.15)] max-h-[90vh] overflow-y-auto custom-scrollbar"
+                  className="bg-[#0a0a0c] border border-yellow-500/30 w-full max-w-2xl p-4 sm:p-6 rounded-[24px] sm:rounded-[32px] shadow-[0_0_50px_rgba(234,179,8,0.15)] relative"
                 >
-                  <button onClick={() => setShowMatchModal(false)} className="absolute top-6 right-6 sm:top-8 sm:right-8 text-gray-500 hover:text-white transition-colors"><X /></button>
-                  <div className="text-center mb-8 sm:mb-10 mt-4 sm:mt-0">
-                    <p className="text-yellow-500 text-[10px] font-black tracking-widest uppercase mb-1 sm:mb-2">Final Whistle</p>
-                    <h2 className="text-2xl sm:text-3xl font-black italic uppercase text-white drop-shadow-md">Record Result</h2>
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="text-center flex-1 min-w-0">
+                      <p className="text-yellow-500 text-[10px] font-black tracking-widest uppercase mb-0.5">Final Whistle</p>
+                      <h2 className="text-lg sm:text-xl font-black italic uppercase text-white drop-shadow-md">Record Result</h2>
+                    </div>
+                    <button onClick={() => setShowMatchModal(false)} className="shrink-0 p-2 -m-2 text-gray-500 hover:text-white transition-colors rounded-lg hover:bg-white/5" aria-label="Close"><X className="w-5 h-5" /></button>
                   </div>
-                  
-                  <div className="space-y-6 sm:space-y-8">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+
+                  <div className="space-y-3 sm:space-y-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
                       <AnimatedDropdown
                         options={activeTournament.teams.map(team => ({ value: team.name, label: formatTeamDisplay(team), raw: team }))}
                         value={matchData.homeTeam ? { value: matchData.homeTeam.name, label: formatTeamDisplay(matchData.homeTeam), raw: matchData.homeTeam } : null}
@@ -814,41 +816,40 @@ export default function MatchDay({ onGoalScored }) {
                       />
                     </div>
 
-                    <div className="flex items-center justify-center gap-6 sm:gap-10 bg-black/50 p-6 sm:p-8 rounded-[24px] sm:rounded-3xl border border-white/5">
+                    <div className="flex items-center justify-center gap-4 sm:gap-6 bg-black/50 p-4 sm:p-6 rounded-2xl border border-white/5">
                       <input 
                         type="number" placeholder="-" 
                         value={matchData.homeScore} 
                         onChange={(e) => setMatchData({...matchData, homeScore: e.target.value === '' ? '' : parseInt(e.target.value)})} 
-                        className="w-20 h-20 sm:w-24 sm:h-24 bg-[#121212] border-2 border-yellow-500/50 focus:border-yellow-500 rounded-2xl sm:rounded-3xl text-center text-4xl sm:text-5xl font-black text-white outline-none placeholder:text-gray-800 transition-colors shadow-[0_0_20px_rgba(234,179,8,0.1)] no-spinners" 
+                        className="w-16 h-16 sm:w-20 sm:h-20 bg-[#121212] border-2 border-yellow-500/50 focus:border-yellow-500 rounded-xl sm:rounded-2xl text-center text-3xl sm:text-4xl font-black text-white outline-none placeholder:text-gray-800 transition-colors shadow-[0_0_20px_rgba(234,179,8,0.1)] no-spinners" 
                       />
-                      <span className="text-xl sm:text-2xl font-black italic text-gray-600">VS</span>
+                      <span className="text-lg sm:text-xl font-black italic text-gray-600">VS</span>
                       <input 
                         type="number" placeholder="-" 
                         value={matchData.awayScore} 
                         onChange={(e) => setMatchData({...matchData, awayScore: e.target.value === '' ? '' : parseInt(e.target.value)})} 
-                        className="w-20 h-20 sm:w-24 sm:h-24 bg-[#121212] border-2 border-yellow-500/50 focus:border-yellow-500 rounded-2xl sm:rounded-3xl text-center text-4xl sm:text-5xl font-black text-white outline-none placeholder:text-gray-800 transition-colors shadow-[0_0_20px_rgba(234,179,8,0.1)] no-spinners" 
+                        className="w-16 h-16 sm:w-20 sm:h-20 bg-[#121212] border-2 border-yellow-500/50 focus:border-yellow-500 rounded-xl sm:rounded-2xl text-center text-3xl sm:text-4xl font-black text-white outline-none placeholder:text-gray-800 transition-colors shadow-[0_0_20px_rgba(234,179,8,0.1)] no-spinners" 
                       />
                     </div>
 
-                    {/* INDIVIDUAL PLAYER GOALS - ONLY SHOW FOR 2V2 */}
                     {activeTournament?.format === '2v2' && (matchData.homeTeam || matchData.awayTeam) && (
-                      <div className="space-y-4 sm:space-y-6 pt-4 sm:pt-6 border-t border-white/5">
+                      <div className="space-y-2 pt-2 border-t border-white/5">
                         <p className="text-[10px] font-black text-yellow-500 uppercase tracking-widest text-center">Assign Individual Goals</p>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-8">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-4">
                           {[matchData.homeTeam, matchData.awayTeam].map((team, tIdx) => (
                             team && (
-                              <div key={tIdx} className="space-y-3 sm:space-y-4 bg-black/40 p-4 sm:p-5 rounded-2xl border border-white/5">
-                                <p className="border-b border-white/10 pb-2 mb-3 sm:mb-4 tracking-wide">
-                      <TeamDisplay team={team} teamNameClass="font-sport text-base sm:text-lg font-bold text-white" playersClass="font-sans text-[11px] font-medium text-gray-500 ml-1.5" />
-                    </p>
+                              <div key={tIdx} className="space-y-1.5 bg-black/40 p-3 rounded-xl border border-white/5">
+                                <p className="border-b border-white/10 pb-1.5 mb-2 text-sm">
+                                  <TeamDisplay team={team} teamNameClass="font-sport text-sm font-bold text-white" playersClass="font-sans text-[10px] font-medium text-gray-500 ml-1" />
+                                </p>
                                 {team.playerData?.map(p => (
-                                  <div key={p.id} className="flex items-center justify-between gap-3">
-                                    <span className="font-sport text-sm font-semibold text-gray-300 truncate flex-1">{toTitleCase(p?.name || '').split(' ')[0]}</span>
+                                  <div key={p.id} className="flex items-center justify-between gap-2">
+                                    <span className="font-sport text-xs font-semibold text-gray-300 truncate flex-1">{toTitleCase(p?.name || '').split(' ')[0]}</span>
                                     <input 
                                       type="number" placeholder="0" 
                                       value={matchData.playerGoals[p.id] || ''} 
                                       onChange={(e) => setMatchData(prev => ({...prev, playerGoals: {...prev.playerGoals, [p.id]: e.target.value === '' ? '' : parseInt(e.target.value)}}))} 
-                                      className="w-14 sm:w-16 h-10 bg-[#121212] border border-white/10 focus:border-yellow-500 rounded-lg text-center text-sm font-black text-yellow-500 placeholder:text-gray-700 outline-none transition-colors no-spinners" 
+                                      className="w-12 h-8 sm:w-14 h-9 bg-[#121212] border border-white/10 focus:border-yellow-500 rounded-lg text-center text-xs font-black text-yellow-500 placeholder:text-gray-700 outline-none transition-colors no-spinners" 
                                     />
                                   </div>
                                 ))}
@@ -857,20 +858,20 @@ export default function MatchDay({ onGoalScored }) {
                           ))}
                         </div>
                         {!isScoreValid() && (
-                          <div className="flex items-center justify-center gap-2 text-red-500 bg-red-500/10 p-3 sm:p-4 rounded-xl border border-red-500/20">
-                            <AlertCircle className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
-                            <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-center leading-tight">Individual goals must equal the team score!</span>
+                          <div className="flex items-center justify-center gap-2 text-red-500 bg-red-500/10 p-2 rounded-lg border border-red-500/20">
+                            <AlertCircle className="w-4 h-4 shrink-0" />
+                            <span className="text-[9px] font-black uppercase tracking-widest text-center">Individual goals must equal team score</span>
                           </div>
                         )}
                       </div>
                     )}
-                    
+
                     <motion.button 
                       disabled={!isScoreValid()} 
                       onClick={handleUpdateScore}
                       whileHover={{ scale: isScoreValid() ? 1.02 : 1 }}
                       whileTap={{ scale: 0.98 }}
-                      className={`w-full py-5 sm:py-6 rounded-2xl font-black uppercase tracking-[0.2em] sm:tracking-[0.3em] text-xs sm:text-sm transition-all mt-2 sm:mt-0 ${isScoreValid() ? 'bg-gradient-to-r from-yellow-600 to-yellow-500 text-black shadow-[0_0_20px_rgba(234,179,8,0.4)]' : 'bg-[#121212] text-gray-600 border border-white/5 cursor-not-allowed'}`}
+                      className={`w-full py-3 sm:py-4 rounded-xl font-black uppercase tracking-[0.15em] text-xs sm:text-sm transition-all ${isScoreValid() ? 'bg-gradient-to-r from-yellow-600 to-yellow-500 text-black shadow-[0_0_20px_rgba(234,179,8,0.4)]' : 'bg-[#121212] text-gray-600 border border-white/5 cursor-not-allowed'}`}
                     >
                       Submit Match Result
                     </motion.button>

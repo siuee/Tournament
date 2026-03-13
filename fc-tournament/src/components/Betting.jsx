@@ -978,6 +978,30 @@ function getFixtureIdFromPlayedMatch(playedMatch, tournament) {
   return `${makeTeamId(home, homeIdx)}-vs-${makeTeamId(away, awayIdx)}-${matchNum}`;
 }
 
+/** Unique key for a played match (tournament + home/away teams + match number) to deduplicate. */
+function getPlayedMatchUniqueKey(m) {
+  if (!m?.tournamentId) return null;
+  const homeIds = (m.homeTeamPlayerIds || []).slice().sort().join(',');
+  const awayIds = (m.awayTeamPlayerIds || []).slice().sort().join(',');
+  const matchNum = String(m.matchNumber ?? m.id ?? '');
+  if (homeIds && awayIds) return `${m.tournamentId}|${homeIds}|${awayIds}|${matchNum}`;
+  const homeName = (m.homeTeam || '').trim();
+  const awayName = (m.awayTeam || '').trim();
+  return `${m.tournamentId}|${homeName}|${awayName}|${matchNum}`;
+}
+
+/** Deduplicate played matches: keep one record per unique fixture (same tournament, teams, match number). */
+function deduplicatePlayedMatches(matches) {
+  if (!Array.isArray(matches) || matches.length === 0) return [];
+  const seen = new Set();
+  return matches.filter((m) => {
+    const key = getPlayedMatchUniqueKey(m);
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 /** Find a played match from Firestore (MatchDay results) that matches this betting fixture (same tournament + same home/away teams + same match number when present). */
 function findPlayedMatchForFixture(fixture, tournament, playedMatches) {
   if (!fixture?.homeTeamObj || !fixture?.awayTeamObj || !tournament?.id || !Array.isArray(playedMatches)) return null;
@@ -1443,18 +1467,20 @@ export default function Betting() {
   }, [tournaments, playedMatches]);
 
   // Matches whose result was published on the selected date (for "results" view below calendar)
+  // Deduplicated so each fixture (tournament + home/away + match number) appears only once
   const playedMatchesOnSelectedDate = useMemo(() => {
     if (!selectedDate || !Array.isArray(playedMatches)) return [];
     const sel = new Date(selectedDate);
     sel.setHours(0, 0, 0, 0);
     const selTime = sel.getTime();
-    return playedMatches.filter((m) => {
+    const filtered = playedMatches.filter((m) => {
       const raw = m.createdAt;
       const d = raw?.toDate ? raw.toDate() : (raw ? new Date(raw) : null);
       if (!d || Number.isNaN(d.getTime())) return false;
       const matchDay = new Date(d.getFullYear(), d.getMonth(), d.getDate());
       return matchDay.getTime() === selTime;
     });
+    return deduplicatePlayedMatches(filtered);
   }, [selectedDate, playedMatches]);
 
   const matchesByTournamentOnSelectedDate = useMemo(() => {
@@ -2186,9 +2212,13 @@ export default function Betting() {
                 ) : (
                   tournaments.map((t) => {
                     const expanded = expandedIds.has(t.id);
-                    const upcomingMatches = getUpcomingFixtures(t, playedMatches, selectedDate);
                     const completedToday = (playedMatchesOnSelectedDate || []).filter((m) => m.tournamentId === t.id);
                     const sortedCompletedToday = [...completedToday].sort((a, b) => (a.matchNumber ?? 0) - (b.matchNumber ?? 0));
+                    const completedFixtureIds = new Set(
+                      sortedCompletedToday.map((pm) => getFixtureIdFromPlayedMatch(pm, t)).filter(Boolean)
+                    );
+                    let upcomingMatches = getUpcomingFixtures(t, playedMatches, selectedDate);
+                    upcomingMatches = upcomingMatches.filter((m) => !completedFixtureIds.has(m.id));
                     const hasCompletedToday = sortedCompletedToday.length > 0;
                     const hasUpcoming = upcomingMatches.length > 0;
                     const meta = getLeagueMeta(t);
