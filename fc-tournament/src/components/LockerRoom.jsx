@@ -310,7 +310,7 @@ export default function LockerRoom() {
   return (
     <div className="min-h-screen relative text-white pb-32 overflow-hidden">
       {/* Header */}
-      <div className="px-4 md:px-8 pt-6 pb-4 border-b border-yellow-500/20 mb-4 md:mb-8 bg-black/60 backdrop-blur-xl sticky top-0 z-30 flex justify-between items-center shadow-[0_10px_30px_rgba(0,0,0,0.5)]">
+      <div className="px-4 md:px-8 pt-6 pb-4 border-b border-yellow-500/20 bg-black/60 backdrop-blur-xl sticky top-0 z-30 flex justify-between items-center shadow-[0_10px_30px_rgba(0,0,0,0.5)]">
          <div className="min-w-0 flex-1 pr-2">
             <h2 className="text-3xl md:text-5xl font-black italic uppercase tracking-tighter text-transparent bg-clip-text bg-gradient-to-b from-yellow-200 via-yellow-500 to-yellow-700 drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)] flex items-center gap-3 pr-2">
               My Club
@@ -328,20 +328,35 @@ export default function LockerRoom() {
            whileTap={{ scale: 0.95 }}
            className="hidden md:flex bg-gradient-to-b from-yellow-300 via-yellow-500 to-yellow-600 px-6 py-3 rounded-xl font-black uppercase text-xs tracking-widest text-black shadow-[0_0_20px_rgba(234,179,8,0.4)] items-center gap-2 border border-yellow-200/50"
          >
-           <UserPlus className="w-4 h-4" /> Open Pack
+           <UserPlus className="w-4 h-4" /> Add Player
          </motion.button>
       </div>
 
-      {/* MOBILE OPEN PACK BUTTON – placed under header so it never hides behind bottom navbar */}
-      <div className="md:hidden px-4 pb-4">
+      {/* MOBILE ADD PLAYER BUTTON – placed under header so it never hides behind bottom navbar */}
+      <div className="md:hidden px-4 pt-3">
         <motion.button 
           onClick={(e) => openWithClick(() => setIsFormOpen(true), e)} 
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}
           className="w-full bg-gradient-to-b from-yellow-300 via-yellow-500 to-yellow-600 py-3 rounded-2xl font-black uppercase tracking-[0.2em] text-xs text-black shadow-[0_8px_20px_rgba(234,179,8,0.4)] flex items-center justify-center gap-2 border border-yellow-200"
         >
-          <UserPlus className="w-4 h-4" /> Open Pack
+          <UserPlus className="w-4 h-4" /> Add Player
         </motion.button>
+      </div>
+
+      {/* LIVE RATINGS NOTICE – slim ticker, same gold language as the header */}
+      <div className="px-4 md:px-8 pt-3 pb-4 md:pb-6">
+        <div className="flex items-center gap-2.5 px-3 py-2 rounded-xl border border-yellow-500/20 bg-gradient-to-r from-yellow-500/[0.07] via-black/50 to-transparent">
+          <span className="relative flex h-2 w-2 shrink-0" aria-hidden="true">
+            <span className="absolute inline-flex h-full w-full rounded-full bg-yellow-400 opacity-70 animate-ping" />
+            <span className="relative inline-flex h-2 w-2 rounded-full bg-yellow-500 shadow-[0_0_8px_rgba(234,179,8,0.8)]" />
+          </span>
+          <p className="text-[9px] sm:text-[10px] font-bold uppercase tracking-[0.16em] text-gray-400 leading-snug">
+            <span className="text-yellow-500">Live</span>
+            <span className="text-yellow-700/80 mx-1.5">·</span>
+            Ratings update as players play
+          </p>
+        </div>
       </div>
 
       {/* FC PLAYER CARDS GRID */}
